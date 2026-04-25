@@ -4,10 +4,51 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR 코드 생성기</title>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"
-          onerror="this.onerror=null;this.src='https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js'"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-          onerror="this.onerror=null;this.src='https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'"></script>
+  <script>
+    // 로컬 호스팅 우선 + 여러 CDN fallback
+    // 로컬 파일이 있으면 즉시 사용 (가장 빠르고 안정적)
+    function loadScript(urls, name) {
+      return new Promise((resolve, reject) => {
+        let idx = 0;
+        function tryNext() {
+          if (idx >= urls.length) {
+            console.error(`❌ ${name} 로딩 실패 (모든 소스 시도)`);
+            reject(new Error(`${name} 로딩 실패`));
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = urls[idx];
+          script.async = false;
+          script.onload = () => {
+            console.log(`✅ ${name} 로드됨: ${urls[idx]}`);
+            resolve();
+          };
+          script.onerror = () => {
+            console.warn(`⚠️ 소스 실패 (${idx + 1}/${urls.length}): ${urls[idx]}`);
+            idx++;
+            tryNext();
+          };
+          document.head.appendChild(script);
+        }
+        tryNext();
+      });
+    }
+
+    window.LIBS_LOADED = Promise.all([
+      loadScript([
+        'assets/qrcode.min.js',  // 로컬 (가장 안정적)
+        'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.js',
+        'https://unpkg.com/qrcode@1.5.3/build/qrcode.js',
+        'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js'
+      ], 'QRCode'),
+      loadScript([
+        'assets/jszip.min.js',   // 로컬 (가장 안정적)
+        'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+        'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+      ], 'JSZip')
+    ]);
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -335,8 +376,50 @@
     let allProducts = [];
     let categories = [];
 
-    window.addEventListener('load', () => {
-      reload();
+    // QR 라이브러리 로딩 대기 헬퍼
+    async function waitForQRCode(maxRetries = 50) {
+      // 1단계: LIBS_LOADED Promise를 우선 기다림 (정상 시 바로 통과)
+      if (window.LIBS_LOADED) {
+        try {
+          await Promise.race([
+            window.LIBS_LOADED,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('timeout')), 8000)
+            )
+          ]);
+        } catch (e) {
+          // LIBS_LOADED가 실패해도 polling으로 한 번 더 확인
+        }
+      }
+      // 2단계: 안전을 위한 polling
+      return new Promise((resolve, reject) => {
+        let retries = 0;
+        const check = () => {
+          if (typeof QRCode !== 'undefined') {
+            resolve();
+          } else if (retries++ >= maxRetries) {
+            reject(new Error('QR 라이브러리 로딩 타임아웃'));
+          } else {
+            setTimeout(check, 100);
+          }
+        };
+        check();
+      });
+    }
+
+    window.addEventListener('load', async () => {
+      try {
+        await waitForQRCode();
+        reload();
+      } catch (err) {
+        document.getElementById('grid').innerHTML = `
+          <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #ff3b30; background: #ffe5e1; border-radius: 12px;">
+            ⚠️ QR 라이브러리 로딩 실패<br>
+            <span style="font-size: 13px; color: #666;">CDN이 차단된 환경일 수 있습니다.<br>
+            광고 차단기를 끄거나 다른 네트워크에서 시도하세요.</span><br>
+            <button onclick="location.reload()" style="margin-top:12px; padding:8px 16px; background:#007aff; color:white; border:none; border-radius:8px; cursor:pointer;">🔄 다시 시도</button>
+          </div>`;
+      }
     });
 
     function reload() {
