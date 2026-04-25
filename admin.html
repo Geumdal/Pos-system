@@ -1,0 +1,1513 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>제품 관리</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      padding: 16px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    button { font-family: inherit; cursor: pointer; }
+
+    header {
+      background: white;
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    header h1 { font-size: 20px; font-weight: 700; }
+    .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+    .nav-btn {
+      padding: 8px 14px; background: #f5f5f7; color: #1d1d1f;
+      border: none; border-radius: 8px; font-size: 13px;
+      text-decoration: none; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .nav-btn.primary { background: #007aff; color: white; }
+
+    .toolbar {
+      background: white;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .add-btn {
+      padding: 10px 16px;
+      background: #34c759; color: white;
+      border: none; border-radius: 10px;
+      font-size: 14px; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 4px;
+      flex-shrink: 0;
+    }
+    .add-btn:active { transform: scale(0.97); }
+    .import-btn {
+      padding: 10px 16px;
+      background: white;
+      border: 1.5px solid #007aff;
+      color: #007aff;
+      border-radius: 10px;
+      font-size: 14px; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 4px;
+      flex-shrink: 0;
+    }
+    .import-btn:active { transform: scale(0.97); }
+    .toolbar input[type="text"], .toolbar select {
+      padding: 9px 12px;
+      border: 1px solid #e5e5ea;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      background: white;
+    }
+    .toolbar input[type="text"] { flex: 1; min-width: 180px; }
+    .toolbar select { flex-shrink: 0; }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .stat-card {
+      background: white;
+      padding: 12px 14px;
+      border-radius: 10px;
+      text-align: center;
+    }
+    .stat-card .v {
+      font-size: 20px; font-weight: 700;
+    }
+    .stat-card .l {
+      font-size: 11px; color: #8e8e93;
+      margin-top: 2px;
+    }
+    .stat-card.warn .v { color: #ff9500; }
+    .stat-card.danger .v { color: #ff3b30; }
+
+    .product-list {
+      display: grid;
+      gap: 8px;
+    }
+    .product-card {
+      background: white;
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.1s;
+      border: 1px solid transparent;
+    }
+    .product-card:hover {
+      border-color: #e5e5ea;
+    }
+    .product-card.inactive {
+      opacity: 0.55;
+    }
+    .pc-info {
+      min-width: 0;
+    }
+    .pc-name-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+    .pc-name {
+      font-size: 15px; font-weight: 600;
+    }
+    .pc-status {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .pc-status.active   { background: #d4f4dd; color: #1c7c2f; }
+    .pc-status.inactive { background: #f5f5f7; color: #8e8e93; }
+    .pc-meta {
+      font-size: 12px;
+      color: #8e8e93;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .pc-meta span:not(:last-child)::after {
+      content: '·'; margin-left: 6px;
+    }
+    .pc-meta .id-tag {
+      font-family: Menlo, Consolas, monospace;
+      background: #f5f5f7;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .pc-meta .stock-low  { color: #ff9500; font-weight: 600; }
+    .pc-meta .stock-empty { color: #ff3b30; font-weight: 600; }
+    .pc-actions {
+      display: flex; gap: 6px;
+    }
+    .pc-btn {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      border: none;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center; justify-content: center;
+    }
+    .pc-btn:active { transform: scale(0.95); }
+    .pc-btn.toggle-on  { background: #34c759; color: white; }
+    .pc-btn.toggle-off { background: #c7c7cc; color: white; }
+    .pc-btn-delete:hover { background: #ffe5e1; }
+    .pc-btn-delete:active { background: #ff3b30; color: white; }
+
+    /* 선택 모드 */
+    .select-btn {
+      padding: 10px 16px;
+      background: white;
+      border: 1.5px solid #8e8e93;
+      color: #1d1d1f;
+      border-radius: 10px;
+      font-size: 14px; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 4px;
+      flex-shrink: 0;
+    }
+    .select-btn:active { transform: scale(0.97); }
+
+    .selection-toolbar {
+      background: #1d1d1f;
+      color: white;
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      display: none;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .selection-toolbar.active { display: flex; }
+    .selection-toolbar .cancel-select {
+      background: rgba(255,255,255,0.15);
+      color: white;
+      border: none;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .selection-toolbar .cancel-select:active { background: rgba(255,255,255,0.25); }
+    .selection-toolbar .select-count {
+      font-size: 14px;
+      font-weight: 600;
+      flex: 1;
+      min-width: 100px;
+    }
+    .selection-toolbar .select-action {
+      background: rgba(255,255,255,0.12);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      font-weight: 500;
+    }
+    .selection-toolbar .select-action:active { background: rgba(255,255,255,0.25); }
+    .selection-toolbar .delete-selected {
+      background: #ff3b30;
+      color: white;
+      border: none;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+    }
+    .selection-toolbar .delete-selected:active { background: #c93026; }
+    .selection-toolbar .delete-selected:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .pc-checkbox {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: white;
+      border: 2px solid #c7c7cc;
+      display: flex;
+      align-items: center; justify-content: center;
+      font-size: 16px;
+      color: white;
+      flex-shrink: 0;
+    }
+    .product-card.selected {
+      background: #e8f3ff;
+      border-color: #007aff;
+    }
+    .product-card.selected .pc-checkbox {
+      background: #007aff;
+      border-color: #007aff;
+    }
+    .product-card.selecting {
+      cursor: pointer;
+    }
+    .product-card.selecting:hover {
+      background: #f5f5f7;
+    }
+    .product-card.selecting.selected:hover {
+      background: #d4e9ff;
+    }
+
+    .empty-state {
+      background: white;
+      border-radius: 12px;
+      padding: 60px 20px;
+      text-align: center;
+      color: #8e8e93;
+    }
+    .loading {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 모달 */
+    .modal-bd {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .modal-bd.active { display: flex; }
+    .modal {
+      background: white;
+      border-radius: 18px;
+      width: 100%; max-width: 480px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 22px;
+    }
+    .modal h2 {
+      font-size: 18px;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .modal-subtitle {
+      font-size: 12px; color: #8e8e93; margin-bottom: 18px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .form-grid .full {
+      grid-column: 1 / -1;
+    }
+    .form-field {
+      display: flex;
+      flex-direction: column;
+    }
+    .form-field label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #8e8e93;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .form-field label .req { color: #ff3b30; }
+    .form-field input,
+    .form-field select {
+      padding: 10px 12px;
+      border: 1px solid #e5e5ea;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      background: white;
+    }
+    .form-field input:focus,
+    .form-field select:focus {
+      outline: none;
+      border-color: #007aff;
+    }
+    .form-field input:disabled {
+      background: #f5f5f7;
+      color: #8e8e93;
+      cursor: not-allowed;
+    }
+    .form-field .hint {
+      font-size: 11px;
+      color: #8e8e93;
+      margin-top: 4px;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: #f5f5f7;
+      border-radius: 10px;
+      margin-top: 4px;
+    }
+    .toggle-row input[type="checkbox"] {
+      width: 18px; height: 18px;
+    }
+
+    .modal-actions {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .btn {
+      padding: 12px 16px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+    }
+    .btn-cancel  { background: #e5e5ea; color: #1d1d1f; }
+    .btn-danger  { background: #fff0f0; color: #ff3b30; }
+    .btn-delete  { background: #ff3b30; color: white; }
+    .btn-confirm { background: #007aff; color: white; }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .toast {
+      position: fixed;
+      top: 20px; left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(29,29,31,0.95);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 24px;
+      z-index: 2000;
+      opacity: 0;
+      transition: all 0.3s;
+      font-size: 14px;
+      max-width: 90%;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.success { background: #34c759; }
+    .toast.error   { background: #ff3b30; }
+
+    @media (max-width: 600px) {
+      .toolbar input[type="text"] { width: 100%; }
+    }
+    @media (max-width: 480px) {
+      header h1 { font-size: 14px; }
+      .nav-btn { padding: 5px 8px; font-size: 11px; }
+      .nav-btn .label { display: none; }
+      header h1 .label { display: none; }
+    }
+
+    /* 외부 시트 가져오기 모달 전용 */
+    .import-info {
+      background: #d4f4dd;
+      border: 1px solid #34c759;
+      color: #1c7c2f;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 14px;
+    }
+    .step-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin: 14px 0 8px;
+    }
+    .preview-wrapper {
+      max-height: 240px;
+      overflow: auto;
+      border: 1px solid #e5e5ea;
+      border-radius: 8px;
+      background: white;
+    }
+    .preview-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .preview-table th, .preview-table td {
+      padding: 7px 10px;
+      text-align: left;
+      border-bottom: 1px solid #f5f5f7;
+      white-space: nowrap;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .preview-table th {
+      background: #f5f5f7;
+      font-weight: 600;
+      color: #666;
+      position: sticky;
+      top: 0;
+    }
+    .preview-table .muted { color: #c7c7cc; font-style: italic; }
+    .warning-box {
+      background: #fff8e5;
+      border: 1px solid #ffe5a3;
+      color: #8a5a00;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin: 12px 0;
+      line-height: 1.5;
+    }
+  </style>
+<script src="config.js"></script>
+  <script src="assets/api.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📋<span class="label"> 제품 관리</span></h1>
+      <div class="nav">
+        <a class="nav-btn" href="pos.html">←<span class="label"> POS</span></a>
+        <a class="nav-btn" href="stockin.html">📥<span class="label"> 입고</span></a>
+        <a class="nav-btn" href="qr.html">🏷️<span class="label"> QR</span></a>
+        <a class="nav-btn" href="stats.html">📊<span class="label"> 통계</span></a>
+        <button class="nav-btn primary" onclick="reload()">🔄<span class="label"> 새로고침</span></button>
+      </div>
+    </header>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="v" id="statTotal">-</div>
+        <div class="l">전체 제품</div>
+      </div>
+      <div class="stat-card">
+        <div class="v" id="statActive">-</div>
+        <div class="l">활성</div>
+      </div>
+      <div class="stat-card warn">
+        <div class="v" id="statLowStock">-</div>
+        <div class="l">재고 부족</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="v" id="statOutOfStock">-</div>
+        <div class="l">품절</div>
+      </div>
+    </div>
+
+    <div class="toolbar" id="normalToolbar">
+      <button class="add-btn" onclick="openAddModal()">+ 새 제품 등록</button>
+      <button class="import-btn" onclick="openImportModal()">📂 외부 시트 가져오기</button>
+      <button class="select-btn" onclick="enterSelectionMode()">☑️ 선택 모드</button>
+      <input type="text" id="searchBox" placeholder="🔍 제품명 또는 ID 검색..." oninput="renderProducts()">
+      <select id="categoryFilter" onchange="renderProducts()">
+        <option value="all">전체 카테고리</option>
+      </select>
+      <select id="statusFilter" onchange="renderProducts()">
+        <option value="all">활성+비활성</option>
+        <option value="active" selected>활성만</option>
+        <option value="inactive">비활성만</option>
+      </select>
+    </div>
+
+    <div class="selection-toolbar" id="selectionToolbar">
+      <button class="cancel-select" onclick="exitSelectionMode()">✕ 취소</button>
+      <span class="select-count" id="selectCount">0개 선택됨</span>
+      <button class="select-action" onclick="toggleSelectAllVisible()" id="selectAllBtn">전체 선택</button>
+      <button class="delete-selected" onclick="deleteSelected()" id="deleteSelectedBtn" disabled>🗑️ 선택 삭제</button>
+    </div>
+
+    <div class="product-list" id="productList">
+      <div class="empty-state"><span class="loading"></span> 불러오는 중...</div>
+    </div>
+  </div>
+
+  <!-- 추가/수정 모달 -->
+  <div class="modal-bd" id="editModal">
+    <div class="modal">
+      <h2 id="modalTitle">새 제품 등록</h2>
+      <div class="modal-subtitle" id="modalSubtitle">새 제품을 등록합니다.</div>
+
+      <div class="form-grid">
+        <div class="form-field full">
+          <label>제품ID <span class="req">*</span></label>
+          <input type="text" id="fId" placeholder="예: P007" autocomplete="off">
+          <div class="hint" id="fIdHint">한 번 등록되면 변경할 수 없습니다 (영문/숫자 권장)</div>
+        </div>
+
+        <div class="form-field full">
+          <label>제품명 <span class="req">*</span></label>
+          <input type="text" id="fName" placeholder="예: 아메리카노">
+        </div>
+
+        <div class="form-field full">
+          <label>카테고리</label>
+          <input type="text" id="fCategory" placeholder="음료" autocomplete="off" list="categoryList">
+          <datalist id="categoryList"></datalist>
+          <div class="hint">기존 카테고리 또는 새로운 이름 입력</div>
+        </div>
+
+        <div class="form-field">
+          <label>가격 <span class="req">*</span></label>
+          <input type="number" id="fPrice" placeholder="0" min="0" step="100">
+        </div>
+
+        <div class="form-field">
+          <label>현재 재고 <span class="req">*</span></label>
+          <input type="number" id="fStock" placeholder="0" min="0" step="1">
+          <div class="hint">POS에서 자동 차감되는 실제 재고</div>
+        </div>
+
+        <div class="form-field">
+          <label>최대 재고</label>
+          <input type="number" id="fMaxStock" placeholder="0" min="0" step="1">
+          <div class="hint">목표 보유량 (Max Qty)</div>
+        </div>
+
+        <div class="form-field">
+          <label>최소 재고 (경고 기준)</label>
+          <input type="number" id="fMinStock" placeholder="10" min="0" step="1">
+          <div class="hint">이하면 POS에 주황색 경고 표시</div>
+        </div>
+
+        <div class="form-field">
+          <label>판매수</label>
+          <input type="number" id="fSoldCount" placeholder="0" min="0" step="1">
+          <div class="hint">누적 판매 수량 (참고용)</div>
+        </div>
+
+        <div class="form-field">
+          <label>보유수</label>
+          <input type="number" id="fRemaining" placeholder="0" step="1">
+          <div class="hint">Remaining (음수도 허용)</div>
+        </div>
+
+        <div class="full">
+          <div class="toggle-row">
+            <input type="checkbox" id="fActive" checked>
+            <label for="fActive" style="margin: 0; font-size: 14px; font-weight: 500; color: #1d1d1f; text-transform: none; letter-spacing: 0;">
+              활성 (POS에 표시)
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="grid-template-columns: 1fr auto auto auto;">
+        <button class="btn btn-cancel" onclick="closeModal()">취소</button>
+        <button class="btn btn-delete" id="deleteBtn" onclick="deleteCurrentProduct()" style="display: none;">🗑️ 삭제</button>
+        <button class="btn btn-danger" id="deactivateBtn" onclick="toggleActive()" style="display: none;">비활성화</button>
+        <button class="btn btn-confirm" id="saveBtn" onclick="saveProduct()">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 외부 시트 가져오기 모달 -->
+  <div class="modal-bd" id="importModal">
+    <div class="modal" style="max-width: 720px;">
+      <h2>📂 외부 시트에서 가져오기</h2>
+
+      <!-- 1단계: URL 입력 -->
+      <div id="importStep1">
+        <div class="modal-subtitle">
+          Google Sheets URL을 붙여넣으면 시트를 자동으로 인식하고 제품 목록을 가져옵니다.
+        </div>
+        <div class="form-field">
+          <label>Google Sheets URL <span class="req">*</span></label>
+          <input type="text" id="importUrl"
+                 placeholder="https://docs.google.com/spreadsheets/d/..."
+                 autocomplete="off"
+                 onkeydown="if (event.key === 'Enter') previewSheet();">
+          <div class="hint">
+            ① 시트의 첫 행은 컬럼명(헤더)이어야 합니다<br>
+            ② 본인 Google 계정으로 접근 가능한 시트만 가져올 수 있습니다<br>
+            ③ 특정 탭을 가져오려면 해당 탭이 선택된 상태의 URL을 복사하세요 (gid 포함)
+          </div>
+        </div>
+        <div class="modal-actions" style="grid-template-columns: 1fr auto;">
+          <button class="btn btn-cancel" onclick="closeImportModal()">취소</button>
+          <button class="btn btn-confirm" id="previewBtn" onclick="previewSheet()">미리보기 →</button>
+        </div>
+      </div>
+
+      <!-- 2단계: 컬럼 매핑 + 미리보기 + 확정 -->
+      <div id="importStep2" style="display:none;">
+        <div class="import-info" id="importInfo"></div>
+
+        <div class="step-title">컬럼 매핑</div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label>제품ID 컬럼 <span class="req">*</span></label>
+            <select id="mapId" onchange="updatePreview()"></select>
+          </div>
+          <div class="form-field">
+            <label>제품명 컬럼 <span class="req">*</span></label>
+            <select id="mapName" onchange="updatePreview()"></select>
+          </div>
+          <div class="form-field">
+            <label>카테고리 컬럼</label>
+            <select id="mapCategory" onchange="updatePreview()"></select>
+          </div>
+          <div class="form-field">
+            <label>가격 컬럼</label>
+            <select id="mapPrice" onchange="updatePreview()"></select>
+          </div>
+          <div class="form-field">
+            <label>최대재고 컬럼</label>
+            <select id="mapMaxStock" onchange="updatePreview()"></select>
+          </div>
+          <div class="form-field">
+            <label>최소재고 컬럼</label>
+            <select id="mapMinStock" onchange="updatePreview()"></select>
+          </div>
+          <div class="form-field">
+            <label>현재 재고 컬럼</label>
+            <select id="mapStock" onchange="updatePreview()"></select>
+          </div>
+          <div class="form-field">
+            <label>판매수 컬럼</label>
+            <select id="mapSoldCount" onchange="updatePreview()"></select>
+          </div>
+          <div class="form-field">
+            <label>보유수 컬럼</label>
+            <select id="mapRemaining" onchange="updatePreview()"></select>
+          </div>
+          <div class="form-field full">
+            <label>기본 재고 (재고 컬럼이 없을 때)</label>
+            <input type="number" id="defaultStock" value="0" min="0">
+            <div class="hint">현재 재고 컬럼이 없으면 보유수 → 이 기본값 순으로 사용</div>
+          </div>
+        </div>
+
+        <div class="step-title">미리보기 (최대 10행)</div>
+        <div class="preview-wrapper">
+          <table class="preview-table" id="previewTable"></table>
+        </div>
+
+        <div class="warning-box">
+          ⚠️ 중복된 제품ID는 자동으로 건너뜁니다. 기존 제품을 업데이트하려면 제품 관리 화면에서 직접 수정하세요.
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-cancel" onclick="backToImportStep1()">← 뒤로</button>
+          <button class="btn btn-cancel" onclick="closeImportModal()">취소</button>
+          <button class="btn btn-confirm" id="importBtn" onclick="confirmImport()">가져오기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let allProducts = [];
+    let editingProduct = null;
+    let isSelectionMode = false;
+    let selectedIds = new Set();
+
+    window.addEventListener('load', () => {
+      reload();
+    });
+
+    function reload() {
+      document.getElementById('productList').innerHTML =
+        '<div class="empty-state"><span class="loading"></span> 불러오는 중...</div>';
+
+      api('getAllProductsAdmin')
+        .then(res => { (onLoaded)(res); })
+        .catch(err => { (err => {
+          document.getElementById('productList').innerHTML =
+            '<div class="empty-state">오류: ' + (err.message || err) + '</div>';
+        })(err); });
+    }
+
+    function onLoaded(res) {
+      if (!res.success) {
+        showToast(res.message, 'error');
+        return;
+      }
+      allProducts = res.products || [];
+
+      const categories = res.categories || [];
+      const catFilter = document.getElementById('categoryFilter');
+      catFilter.innerHTML = '<option value="all">전체 카테고리</option>' +
+        categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+      const datalist = document.getElementById('categoryList');
+      datalist.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}">`).join('');
+
+      updateStats();
+      renderProducts();
+    }
+
+    function updateStats() {
+      const total = allProducts.length;
+      const active = allProducts.filter(p => p.active).length;
+      const lowStock = allProducts.filter(p =>
+        p.active && p.stock > 0 && p.stock <= p.minStock
+      ).length;
+      const outOfStock = allProducts.filter(p => p.active && p.stock === 0).length;
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statActive').textContent = active;
+      document.getElementById('statLowStock').textContent = lowStock;
+      document.getElementById('statOutOfStock').textContent = outOfStock;
+    }
+
+    function renderProducts() {
+      const search = document.getElementById('searchBox').value.trim().toLowerCase();
+      const catFilter = document.getElementById('categoryFilter').value;
+      const statusFilter = document.getElementById('statusFilter').value;
+      const list = document.getElementById('productList');
+
+      const filtered = allProducts.filter(p => {
+        if (statusFilter === 'active' && !p.active) return false;
+        if (statusFilter === 'inactive' && p.active) return false;
+        if (catFilter !== 'all' && p.category !== catFilter) return false;
+        if (search) {
+          return p.id.toLowerCase().includes(search) ||
+                 p.name.toLowerCase().includes(search);
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            ${allProducts.length === 0
+              ? '등록된 제품이 없습니다.<br>"+ 새 제품 등록" 버튼을 눌러 시작하세요.'
+              : '필터에 맞는 제품이 없습니다.'}
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = filtered.map(p => {
+        const isOut = p.stock === 0;
+        const isLow = p.stock > 0 && p.stock <= p.minStock;
+        let stockClass = '';
+        let stockText = `재고 ${p.stock}`;
+        if (isOut) { stockClass = 'stock-empty'; stockText = '품절'; }
+        else if (isLow) { stockClass = 'stock-low'; }
+
+        const isSelected = selectedIds.has(p.id);
+        const cardClasses = [
+          'product-card',
+          p.active ? '' : 'inactive',
+          isSelectionMode ? 'selecting' : '',
+          isSelected ? 'selected' : ''
+        ].filter(Boolean).join(' ');
+
+        const cardClick = isSelectionMode
+          ? `toggleSelect('${escapeAttr(p.id)}')`
+          : `openEditModal('${escapeAttr(p.id)}')`;
+
+        const rightSide = isSelectionMode
+          ? `<div class="pc-checkbox">${isSelected ? '✓' : ''}</div>`
+          : `<div class="pc-actions">
+              <button class="pc-btn ${p.active ? 'toggle-on' : 'toggle-off'}"
+                      onclick="event.stopPropagation(); quickToggle('${escapeAttr(p.id)}', ${!p.active})"
+                      title="${p.active ? '비활성화' : '활성화'}">
+                ${p.active ? '✓' : '✕'}
+              </button>
+              <button class="pc-btn"
+                      onclick="event.stopPropagation(); openEditModal('${escapeAttr(p.id)}')"
+                      title="수정">✏️</button>
+              <button class="pc-btn pc-btn-delete"
+                      onclick="event.stopPropagation(); quickDelete('${escapeAttr(p.id)}')"
+                      title="삭제">🗑️</button>
+            </div>`;
+
+        return `
+          <div class="${cardClasses}" onclick="${cardClick}">
+            <div class="pc-info">
+              <div class="pc-name-row">
+                <div class="pc-name">${escapeHtml(p.name)}</div>
+                <span class="pc-status ${p.active ? 'active' : 'inactive'}">
+                  ${p.active ? '🟢 활성' : '⚫ 비활성'}
+                </span>
+              </div>
+              <div class="pc-meta">
+                <span class="id-tag">${escapeHtml(p.id)}</span>
+                <span>${escapeHtml(p.category)}</span>
+                <span>${fmtUSD(p.price)}</span>
+                <span class="${stockClass}">${stockText}</span>
+                ${p.minStock > 0 ? `<span>최소 ${p.minStock}</span>` : ''}
+                ${p.maxStock > 0 ? `<span>최대 ${p.maxStock}</span>` : ''}
+                ${p.soldCount > 0 ? `<span>판매 ${p.soldCount}</span>` : ''}
+                ${p.remaining !== 0 && p.remaining !== undefined ? `<span>보유 ${p.remaining}</span>` : ''}
+              </div>
+            </div>
+            ${rightSide}
+          </div>
+        `;
+      }).join('');
+
+      if (isSelectionMode) updateSelectionCount();
+    }
+
+    function openAddModal() {
+      editingProduct = null;
+      document.getElementById('modalTitle').textContent = '새 제품 등록';
+      document.getElementById('modalSubtitle').textContent = '새 제품을 등록합니다.';
+      document.getElementById('fId').disabled = false;
+      document.getElementById('fId').value = '';
+      document.getElementById('fIdHint').textContent =
+        '한 번 등록되면 변경할 수 없습니다 (영문/숫자 권장)';
+      document.getElementById('fName').value = '';
+      document.getElementById('fCategory').value = '';
+      document.getElementById('fPrice').value = '';
+      document.getElementById('fStock').value = '0';
+      document.getElementById('fMaxStock').value = '0';
+      document.getElementById('fMinStock').value = '10';
+      document.getElementById('fSoldCount').value = '0';
+      document.getElementById('fRemaining').value = '0';
+      document.getElementById('fActive').checked = true;
+      document.getElementById('deactivateBtn').style.display = 'none';
+      document.getElementById('deleteBtn').style.display = 'none';
+      document.getElementById('saveBtn').textContent = '등록';
+      document.getElementById('editModal').classList.add('active');
+      setTimeout(() => document.getElementById('fId').focus(), 100);
+    }
+
+    function openEditModal(productId) {
+      const p = allProducts.find(x => x.id === productId);
+      if (!p) return;
+      editingProduct = p;
+
+      document.getElementById('modalTitle').textContent = '제품 수정';
+      document.getElementById('modalSubtitle').textContent =
+        `"${p.name}" 정보를 수정합니다.`;
+      document.getElementById('fId').disabled = true;
+      document.getElementById('fId').value = p.id;
+      document.getElementById('fIdHint').textContent =
+        '제품ID는 거래 이력에 사용되어 변경할 수 없습니다';
+      document.getElementById('fName').value = p.name;
+      document.getElementById('fCategory').value = p.category;
+      document.getElementById('fPrice').value = p.price;
+      document.getElementById('fStock').value = p.stock;
+      document.getElementById('fMaxStock').value = p.maxStock || 0;
+      document.getElementById('fMinStock').value = p.minStock;
+      document.getElementById('fSoldCount').value = p.soldCount || 0;
+      document.getElementById('fRemaining').value = p.remaining || 0;
+      document.getElementById('fActive').checked = p.active;
+
+      const deactBtn = document.getElementById('deactivateBtn');
+      deactBtn.style.display = 'inline-flex';
+      deactBtn.textContent = p.active ? '비활성화' : '활성화';
+
+      document.getElementById('deleteBtn').style.display = 'inline-flex';
+
+      document.getElementById('saveBtn').textContent = '저장';
+      document.getElementById('editModal').classList.add('active');
+      setTimeout(() => document.getElementById('fName').focus(), 100);
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').classList.remove('active');
+      editingProduct = null;
+    }
+
+    function saveProduct() {
+      const id = document.getElementById('fId').value.trim();
+      const name = document.getElementById('fName').value.trim();
+      const category = document.getElementById('fCategory').value.trim() || '기본';
+      const price = Number(document.getElementById('fPrice').value);
+      const stock = Number(document.getElementById('fStock').value);
+      const minStock = Number(document.getElementById('fMinStock').value) || 0;
+      const active = document.getElementById('fActive').checked;
+      const maxStock = Number(document.getElementById('fMaxStock').value) || 0;
+      const soldCount = Number(document.getElementById('fSoldCount').value) || 0;
+      const remaining = Number(document.getElementById('fRemaining').value) || 0;
+
+      if (!id) { showToast('제품ID를 입력하세요', 'error'); return; }
+      if (!name) { showToast('제품명을 입력하세요', 'error'); return; }
+      if (isNaN(price) || price < 0) { showToast('가격은 0 이상의 숫자', 'error'); return; }
+      if (isNaN(stock) || stock < 0) { showToast('재고는 0 이상의 숫자', 'error'); return; }
+
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true;
+      btn.textContent = '저장 중...';
+
+      const product = { id, name, category, price, stock, minStock, active, maxStock, soldCount, remaining };
+
+      if (editingProduct) {
+        api('updateProduct', { productId: id, updates: { name, category, price, stock, minStock, active, maxStock, soldCount, remaining } })
+        .then(res => { (onSaved)(res); })
+        .catch(err => { (onSaveError)(err); });
+      } else {
+        api('addProduct', { product: product })
+        .then(res => { (onSaved)(res); })
+        .catch(err => { (onSaveError)(err); });
+      }
+    }
+
+    function onSaved(res) {
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = false;
+      btn.textContent = editingProduct ? '저장' : '등록';
+
+      if (!res.success) {
+        showToast(res.message, 'error');
+        return;
+      }
+      showToast(editingProduct ? '제품이 수정되었습니다' : '제품이 등록되었습니다', 'success');
+      closeModal();
+      reload();
+    }
+
+    function onSaveError(err) {
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = false;
+      btn.textContent = editingProduct ? '저장' : '등록';
+      showToast('오류: ' + (err.message || err), 'error');
+    }
+
+    function toggleActive() {
+      if (!editingProduct) return;
+      const newActive = !editingProduct.active;
+      const verb = newActive ? '활성화' : '비활성화';
+      if (!confirm(`"${editingProduct.name}"을(를) ${verb}하시겠습니까?`)) return;
+
+      const btn = document.getElementById('deactivateBtn');
+      btn.disabled = true;
+      btn.textContent = '처리 중...';
+
+      api('setProductActive', { productId: editingProduct.id, active: newActive })
+        .then(res => { (res => {
+          btn.disabled = false;
+          if (!res.success) {
+            showToast(res.message, 'error');
+            btn.textContent = newActive ? '활성화' : '비활성화';
+            return;
+          }
+          showToast(`${verb}되었습니다`, 'success');
+          closeModal();
+          reload();
+        })(res); })
+        .catch(err => { (err => {
+          btn.disabled = false;
+          showToast('오류: ' + (err.message || err), 'error');
+        })(err); });
+    }
+
+    function quickToggle(productId, newActive) {
+      const p = allProducts.find(x => x.id === productId);
+      if (!p) return;
+      const verb = newActive ? '활성화' : '비활성화';
+      if (!confirm(`"${p.name}"을(를) ${verb}하시겠습니까?`)) return;
+
+      api('setProductActive', { productId: productId, active: newActive })
+        .then(res => { (res => {
+          if (!res.success) { showToast(res.message, 'error'); return; }
+          showToast(`${verb}되었습니다`, 'success');
+          reload();
+        })(res); })
+        .catch(err => { (err => showToast('오류: ' + (err.message || err), 'error'))(err); });
+    }
+
+    function quickDelete(productId) {
+      const p = allProducts.find(x => x.id === productId);
+      if (!p) return;
+
+      api('checkProductHasSales', { productId: productId })
+        .then(res => { (checkRes => {
+          if (!checkRes.success) {
+            showToast(checkRes.message, 'error');
+            return;
+          }
+
+          let confirmMsg;
+          if (checkRes.hasSales) {
+            confirmMsg =
+              `⚠️ "${p.name}"은(는) 거래 이력 ${checkRes.count}건이 있습니다.\n` +
+              `완전 삭제하시겠습니까? (비활성화가 더 안전합니다)`;
+          } else {
+            confirmMsg = `"${p.name}"을(를) 완전 삭제하시겠습니까?\n되돌릴 수 없습니다.`;
+          }
+
+          if (!confirm(confirmMsg)) return;
+
+          api('deleteProduct', { productId: productId })
+            .then(res => {
+              if (!res.success) { showToast(res.message, 'error'); return; }
+              showToast(`"${p.name}" 삭제됨`, 'success');
+              reload();
+            })
+            .catch(err => showToast('오류: ' + (err.message || err), 'error'));
+        })(res); })
+        .catch(err => { (err => showToast('오류: ' + (err.message || err), 'error'))(err); });
+    }
+
+
+    /* ─── 다중 선택 / 일괄 삭제 ─── */
+
+    function getVisibleProducts() {
+      const search = document.getElementById('searchBox').value.trim().toLowerCase();
+      const catFilter = document.getElementById('categoryFilter').value;
+      const statusFilter = document.getElementById('statusFilter').value;
+
+      return allProducts.filter(p => {
+        if (statusFilter === 'active' && !p.active) return false;
+        if (statusFilter === 'inactive' && p.active) return false;
+        if (catFilter !== 'all' && p.category !== catFilter) return false;
+        if (search) {
+          return p.id.toLowerCase().includes(search) ||
+                 p.name.toLowerCase().includes(search);
+        }
+        return true;
+      });
+    }
+
+    function enterSelectionMode() {
+      isSelectionMode = true;
+      selectedIds.clear();
+      document.getElementById('normalToolbar').style.display = 'none';
+      document.getElementById('selectionToolbar').classList.add('active');
+      updateSelectionCount();
+      renderProducts();
+    }
+
+    function exitSelectionMode() {
+      isSelectionMode = false;
+      selectedIds.clear();
+      document.getElementById('normalToolbar').style.display = 'flex';
+      document.getElementById('selectionToolbar').classList.remove('active');
+      renderProducts();
+    }
+
+    function toggleSelect(productId) {
+      if (selectedIds.has(productId)) {
+        selectedIds.delete(productId);
+      } else {
+        selectedIds.add(productId);
+      }
+      updateSelectionCount();
+      renderProducts();
+    }
+
+    function toggleSelectAllVisible() {
+      const visible = getVisibleProducts();
+      const allSelected = visible.every(p => selectedIds.has(p.id));
+
+      if (allSelected) {
+        // 모두 선택된 상태 → 보이는 것만 해제
+        visible.forEach(p => selectedIds.delete(p.id));
+      } else {
+        // 그 외엔 보이는 것 모두 선택
+        visible.forEach(p => selectedIds.add(p.id));
+      }
+      updateSelectionCount();
+      renderProducts();
+    }
+
+    function updateSelectionCount() {
+      const count = selectedIds.size;
+      const visible = getVisibleProducts();
+      const allSelected = visible.length > 0 && visible.every(p => selectedIds.has(p.id));
+
+      document.getElementById('selectCount').textContent = count + '개 선택됨';
+      document.getElementById('selectAllBtn').textContent =
+        allSelected ? '선택 해제' : '전체 선택';
+      document.getElementById('deleteSelectedBtn').disabled = count === 0;
+    }
+
+    function deleteSelected() {
+      if (selectedIds.size === 0) {
+        showToast('선택된 제품이 없습니다', 'error');
+        return;
+      }
+
+      const ids = Array.from(selectedIds);
+      const namesPreview = ids.slice(0, 5).map(id => {
+        const p = allProducts.find(x => x.id === id);
+        return p ? `• ${p.name}` : `• ${id}`;
+      }).join('\n');
+      const moreText = ids.length > 5 ? `\n외 ${ids.length - 5}개` : '';
+
+      const confirmMsg =
+        `다음 ${ids.length}개 제품을 완전 삭제합니다:\n\n` +
+        `${namesPreview}${moreText}\n\n` +
+        `⚠️ 이 작업은 되돌릴 수 없습니다.\n` +
+        `거래 이력이 있는 제품은 매출 통계에 영향이 있을 수 있습니다.\n\n` +
+        `정말 삭제하시겠습니까?`;
+
+      if (!confirm(confirmMsg)) return;
+
+      const btn = document.getElementById('deleteSelectedBtn');
+      btn.disabled = true;
+      btn.textContent = '삭제 중...';
+
+      api('deleteMultipleProducts', { productIds: ids })
+        .then(res => { (res => {
+          btn.disabled = false;
+          btn.textContent = '🗑️ 선택 삭제';
+
+          if (!res.success) {
+            showToast(res.message, 'error');
+            return;
+          }
+          showToast(`${res.deletedCount}개 제품 삭제됨`, 'success');
+          exitSelectionMode();
+          reload();
+        })(res); })
+        .catch(err => { (err => {
+          btn.disabled = false;
+          btn.textContent = '🗑️ 선택 삭제';
+          showToast('오류: ' + (err.message || err), 'error');
+        })(err); });
+    }
+
+    function deleteCurrentProduct() {
+      if (!editingProduct) return;
+      const p = editingProduct;
+
+      // 1단계: 거래 이력 확인
+      const btn = document.getElementById('deleteBtn');
+      btn.disabled = true;
+      btn.textContent = '확인 중...';
+
+      api('checkProductHasSales', { productId: p.id })
+        .then(res => { (checkRes => {
+          btn.disabled = false;
+          btn.textContent = '🗑️ 삭제';
+
+          if (!checkRes.success) {
+            showToast(checkRes.message, 'error');
+            return;
+          }
+
+          // 2단계: 사용자 확인
+          let confirmMsg;
+          if (checkRes.hasSales) {
+            confirmMsg =
+              `⚠️ 경고: "${p.name}"은(는) 거래 이력이 ${checkRes.count}건 있습니다.\n\n` +
+              `완전 삭제하면:\n` +
+              `• Products 시트에서 행이 제거됩니다\n` +
+              `• 매출 통계의 베스트셀러 등에서 이름이 표시되지 않을 수 있습니다 (거래 시점 스냅샷은 보존)\n` +
+              `• 단종 처리는 "비활성화"가 더 안전합니다\n\n` +
+              `정말 완전 삭제하시겠습니까?`;
+          } else {
+            confirmMsg =
+              `"${p.name}"을(를) 완전 삭제하시겠습니까?\n\n` +
+              `Products 시트에서 행이 제거되며 되돌릴 수 없습니다.`;
+          }
+
+          if (!confirm(confirmMsg)) return;
+
+          // 3단계: 실제 삭제
+          btn.disabled = true;
+          btn.textContent = '삭제 중...';
+
+          api('deleteProduct', { productId: p.id })
+            .then(res => {
+              btn.disabled = false;
+              btn.textContent = '🗑️ 삭제';
+
+              if (!res.success) {
+                showToast(res.message, 'error');
+                return;
+              }
+              showToast(`"${p.name}" 삭제됨`, 'success');
+              closeModal();
+              reload();
+            })
+            .catch(err => {
+              btn.disabled = false;
+              btn.textContent = '🗑️ 삭제';
+              showToast('오류: ' + (err.message || err), 'error');
+            });
+        })(res); })
+        .catch(err => { (err => {
+          btn.disabled = false;
+          btn.textContent = '🗑️ 삭제';
+          showToast('오류: ' + (err.message || err), 'error');
+        })(err); });
+    }
+
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show ' + (type || '');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+
+    /* ─── 외부 시트 가져오기 ─── */
+    let previewedHeaders = [];
+    let previewedRows = [];
+    let importUrl = '';
+
+    function openImportModal() {
+      document.getElementById('importStep1').style.display = 'block';
+      document.getElementById('importStep2').style.display = 'none';
+      document.getElementById('importUrl').value = '';
+      document.getElementById('importModal').classList.add('active');
+      setTimeout(() => document.getElementById('importUrl').focus(), 100);
+    }
+    function closeImportModal() {
+      document.getElementById('importModal').classList.remove('active');
+    }
+    function backToImportStep1() {
+      document.getElementById('importStep1').style.display = 'block';
+      document.getElementById('importStep2').style.display = 'none';
+    }
+
+    function previewSheet() {
+      const url = document.getElementById('importUrl').value.trim();
+      if (!url) { showToast('URL을 입력하세요', 'error'); return; }
+
+      importUrl = url;
+      const btn = document.getElementById('previewBtn');
+      btn.disabled = true;
+      btn.textContent = '확인 중...';
+
+      api('previewExternalSheet', { url: url })
+        .then(res => { (onPreviewLoaded)(res); })
+        .catch(err => { (err => {
+          btn.disabled = false;
+          btn.textContent = '미리보기 →';
+          showToast('오류: ' + (err.message || err), 'error');
+        })(err); });
+    }
+
+    function onPreviewLoaded(res) {
+      const btn = document.getElementById('previewBtn');
+      btn.disabled = false;
+      btn.textContent = '미리보기 →';
+
+      if (!res.success) {
+        showToast(res.message, 'error');
+        return;
+      }
+
+      previewedHeaders = res.headers;
+      previewedRows = res.preview;
+
+      document.getElementById('importStep1').style.display = 'none';
+      document.getElementById('importStep2').style.display = 'block';
+
+      document.getElementById('importInfo').innerHTML =
+        '✅ 시트 인식 성공: <strong>' + escapeHtml(res.sheetName) + '</strong> · ' +
+        '컬럼 ' + res.headers.length + '개 · 데이터 ' + res.totalRows + '행';
+
+      const fields = [
+        'mapId', 'mapName', 'mapCategory', 'mapPrice',
+        'mapMaxStock', 'mapMinStock', 'mapStock', 'mapSoldCount', 'mapRemaining'
+      ];
+      const optional = [
+        'mapCategory', 'mapPrice', 'mapMaxStock', 'mapMinStock',
+        'mapStock', 'mapSoldCount', 'mapRemaining'
+      ];
+      const keyMap = {
+        mapId: 'id', mapName: 'name', mapCategory: 'category',
+        mapPrice: 'price', mapStock: 'stock', mapMinStock: 'minStock',
+        mapMaxStock: 'maxStock', mapSoldCount: 'soldCount', mapRemaining: 'remaining'
+      };
+      const mapping = res.mapping || {};
+
+      fields.forEach(fieldId => {
+        const select = document.getElementById(fieldId);
+        let html = '';
+
+        // 제품ID 드롭다운에는 "자동 생성" 옵션 추가 (값 -2)
+        if (fieldId === 'mapId') {
+          html += '<option value="-2">⚡ 자동 생성 (P001, P002, ...)</option>';
+        }
+        if (optional.includes(fieldId)) {
+          html += '<option value="-1">(없음)</option>';
+        }
+        res.headers.forEach((h, i) => {
+          const colLetter = _colLetter(i);
+          html += '<option value="' + i + '">' +
+            colLetter + ': ' + escapeHtml(h || '(빈 컬럼)') + '</option>';
+        });
+        select.innerHTML = html;
+
+        const key = keyMap[fieldId];
+        if (mapping[key] !== undefined && mapping[key] >= 0) {
+          select.value = mapping[key];
+        } else if (fieldId === 'mapId') {
+          // ID 자동 인식 실패 시 자동 생성 모드로 기본 설정
+          select.value = -2;
+        } else if (optional.includes(fieldId)) {
+          select.value = -1;
+        }
+      });
+
+      updatePreview();
+    }
+
+    function _colLetter(i) {
+      let s = '';
+      let n = i;
+      while (true) {
+        s = String.fromCharCode(65 + (n % 26)) + s;
+        n = Math.floor(n / 26) - 1;
+        if (n < 0) break;
+      }
+      return s;
+    }
+
+    function updatePreview() {
+      const idCol        = parseInt(document.getElementById('mapId').value, 10);
+      const nameCol      = parseInt(document.getElementById('mapName').value, 10);
+      const categoryCol  = parseInt(document.getElementById('mapCategory').value, 10);
+      const priceCol     = parseInt(document.getElementById('mapPrice').value, 10);
+      const maxStockCol  = parseInt(document.getElementById('mapMaxStock').value, 10);
+      const minStockCol  = parseInt(document.getElementById('mapMinStock').value, 10);
+      const stockCol     = parseInt(document.getElementById('mapStock').value, 10);
+      const soldCountCol = parseInt(document.getElementById('mapSoldCount').value, 10);
+      const remainingCol = parseInt(document.getElementById('mapRemaining').value, 10);
+
+      const isAutoGen = (idCol === -2);
+
+      const table = document.getElementById('previewTable');
+      let html = '<thead><tr>' +
+        '<th>제품ID' + (isAutoGen ? ' (자동)' : '') + '</th>' +
+        '<th>제품명</th>' +
+        '<th>카테고리</th>' +
+        '<th>가격</th>' +
+        '<th>최대재고</th>' +
+        '<th>최소재고</th>' +
+        '<th>현재재고</th>' +
+        '<th>판매수</th>' +
+        '<th>보유수</th>' +
+        '</tr></thead><tbody>';
+
+      previewedRows.forEach((row, idx) => {
+        const cell = (i, fallback) => {
+          if (i < 0) return '<span class="muted">' + fallback + '</span>';
+          return escapeHtml(row[i] == null ? '' : String(row[i]));
+        };
+        const idCell = isAutoGen
+          ? '<span style="color:#007aff;font-weight:600;">P' + String(idx + 1).padStart(3, '0') + '</span>'
+          : cell(idCol, '미선택');
+
+        // 현재재고: 매핑 안 됐을 때 보유수 폴백 표시
+        const stockCell = stockCol >= 0
+          ? escapeHtml(row[stockCol] == null ? '' : String(row[stockCol]))
+          : (remainingCol >= 0
+              ? '<span style="color:#34c759;">↓ ' + escapeHtml(row[remainingCol] == null ? '0' : String(row[remainingCol])) + '</span>'
+              : '<span class="muted">기본값 사용</span>');
+
+        html += '<tr>';
+        html += '<td>' + idCell + '</td>';
+        html += '<td>' + cell(nameCol, '미선택') + '</td>';
+        html += '<td>' + cell(categoryCol, '기본') + '</td>';
+        html += '<td>' + cell(priceCol, '0') + '</td>';
+        html += '<td>' + cell(maxStockCol, '0') + '</td>';
+        html += '<td>' + cell(minStockCol, '0') + '</td>';
+        html += '<td>' + stockCell + '</td>';
+        html += '<td>' + cell(soldCountCol, '0') + '</td>';
+        html += '<td>' + cell(remainingCol, '0') + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody>';
+      table.innerHTML = html;
+    }
+
+    function confirmImport() {
+      const mapping = {
+        id:        parseInt(document.getElementById('mapId').value, 10),
+        name:      parseInt(document.getElementById('mapName').value, 10),
+        category:  parseInt(document.getElementById('mapCategory').value, 10),
+        price:     parseInt(document.getElementById('mapPrice').value, 10),
+        stock:     parseInt(document.getElementById('mapStock').value, 10),
+        minStock:  parseInt(document.getElementById('mapMinStock').value, 10),
+        maxStock:  parseInt(document.getElementById('mapMaxStock').value, 10),
+        soldCount: parseInt(document.getElementById('mapSoldCount').value, 10),
+        remaining: parseInt(document.getElementById('mapRemaining').value, 10)
+      };
+      const defaultStock = Number(document.getElementById('defaultStock').value) || 0;
+
+      // mapping.id === -2 는 자동 생성 모드 (허용)
+      // mapping.id === -1 은 미선택 (불허)
+      if (mapping.id !== -2 && mapping.id < 0) {
+        showToast('제품ID 컬럼을 선택하거나 자동 생성을 활성화하세요', 'error'); return;
+      }
+      if (mapping.name < 0) { showToast('제품명 컬럼을 선택하세요', 'error'); return; }
+
+      const btn = document.getElementById('importBtn');
+      btn.disabled = true;
+      btn.textContent = '가져오는 중...';
+
+      api('importExternalSheet', { url: importUrl, mapping: mapping, defaultStock: defaultStock })
+        .then(res => { (res => {
+          btn.disabled = false;
+          btn.textContent = '가져오기';
+          if (!res.success) { showToast(res.message, 'error'); return; }
+
+          let msg = `✅ ${res.imported}개 제품 추가됨`;
+          const extras = [];
+          if (res.duplicated > 0) extras.push(`중복 ${res.duplicated}개 제외`);
+          if (res.skipped > 0)    extras.push(`빈 행 ${res.skipped}개 제외`);
+          if (extras.length > 0)  msg += ` (${extras.join(', ')})`;
+
+          showToast(msg, 'success');
+          closeImportModal();
+          reload();
+        })(res); })
+        .catch(err => { (err => {
+          btn.disabled = false;
+          btn.textContent = '가져오기';
+          showToast('오류: ' + (err.message || err), 'error');
+        })(err); });
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[m]));
+    }
+    function fmtUSD(amount) {
+      const n = Number(amount) || 0;
+      return '$' + n.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+    function escapeAttr(str) {
+      return String(str).replace(/['"\\]/g, m => '\\' + m);
+    }
+
+    document.getElementById('editModal').addEventListener('click', (e) => {
+      if (e.target.id === 'editModal') closeModal();
+    });
+    document.getElementById('importModal').addEventListener('click', (e) => {
+      if (e.target.id === 'importModal') closeImportModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (document.getElementById('editModal').classList.contains('active')) closeModal();
+        if (document.getElementById('importModal').classList.contains('active')) closeImportModal();
+      }
+    });
+  </script>
+</body>
+</html>

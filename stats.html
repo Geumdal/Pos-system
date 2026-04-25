@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>매출 통계</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      padding: 16px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    header {
+      background: white;
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    header h1 { font-size: 20px; font-weight: 700; }
+    header .nav {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .nav-btn {
+      padding: 8px 14px; background: #f5f5f7; color: #1d1d1f;
+      border: none; border-radius: 8px; font-size: 13px;
+      text-decoration: none; cursor: pointer; font-family: inherit;
+    }
+    .nav-btn.primary { background: #1d1d1f; color: white; }
+
+    /* 기간 탭 */
+    .period-tabs {
+      display: flex; gap: 6px; background: white;
+      padding: 6px; border-radius: 10px; margin-bottom: 16px;
+    }
+    .period-tab {
+      flex: 1;
+      padding: 10px;
+      background: transparent; border: none; cursor: pointer;
+      font-size: 13px; font-weight: 500; color: #666;
+      border-radius: 7px; font-family: inherit;
+    }
+    .period-tab.active {
+      background: #1d1d1f; color: white;
+    }
+
+    /* 요약 카드 */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px; margin-bottom: 16px;
+    }
+    .summary-card {
+      background: white;
+      padding: 16px 18px;
+      border-radius: 12px;
+    }
+    .summary-card .label {
+      font-size: 12px; color: #8e8e93;
+      margin-bottom: 6px; font-weight: 500;
+    }
+    .summary-card .value {
+      font-size: 22px; font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .summary-card .sub {
+      font-size: 11px; color: #8e8e93; margin-top: 2px;
+    }
+    .summary-card.primary {
+      background: #1d1d1f; color: white;
+    }
+    .summary-card.primary .label { color: rgba(255,255,255,0.6); }
+    .summary-card.primary .sub { color: rgba(255,255,255,0.5); }
+
+    /* 차트 그리드 */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 12px; margin-bottom: 16px;
+    }
+    .chart-card {
+      background: white;
+      padding: 16px 18px;
+      border-radius: 12px;
+    }
+    .chart-card h3 {
+      font-size: 14px; font-weight: 600;
+      margin-bottom: 12px; color: #1d1d1f;
+    }
+    .chart-wrapper { position: relative; height: 240px; }
+
+    /* 하단 그리드 */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* 베스트셀러 */
+    .product-row {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid #f5f5f7;
+      align-items: center;
+    }
+    .product-row:last-child { border-bottom: none; }
+    .product-rank {
+      width: 24px; height: 24px;
+      background: #f5f5f7;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #666;
+    }
+    .product-row:nth-child(1) .product-rank { background: #ffd700; color: #1d1d1f; }
+    .product-row:nth-child(2) .product-rank { background: #c0c0c0; color: #1d1d1f; }
+    .product-row:nth-child(3) .product-rank { background: #cd7f32; color: white; }
+    .product-info-col .pname {
+      font-size: 13px; font-weight: 600;
+    }
+    .product-info-col .pmeta {
+      font-size: 11px; color: #8e8e93; margin-top: 2px;
+    }
+    .product-amount {
+      font-size: 13px; font-weight: 600; text-align: right;
+    }
+
+    /* 거래 테이블 */
+    .sales-table {
+      width: 100%; font-size: 12px;
+    }
+    .sales-table th {
+      text-align: left; padding: 6px 4px;
+      color: #8e8e93; font-weight: 500;
+      border-bottom: 1px solid #f5f5f7;
+    }
+    .sales-table td {
+      padding: 8px 4px;
+      border-bottom: 1px solid #f5f5f7;
+    }
+    .sales-table .amt { text-align: right; font-weight: 600; }
+    .sales-table .method {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 8px;
+      background: #f5f5f7;
+    }
+    .sales-table .method.cash  { background: #d4f4dd; color: #1c7c2f; }
+    .sales-table .method.venmo { background: #d8edf8; color: #1a4f6e; }
+    .sales-table .status-refund {
+      font-size: 10px; color: #ff3b30; font-weight: 600;
+    }
+
+    .empty-state {
+      padding: 40px 20px; text-align: center; color: #8e8e93;
+    }
+    .loading {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 768px) {
+      .charts-grid { grid-template-columns: 1fr; }
+      .bottom-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+      header h1 { font-size: 14px; }
+      header h1 .label { display: none; }
+      .nav-btn { padding: 5px 8px; font-size: 11px; }
+      .nav-btn .label { display: none; }
+    }
+  </style>
+<script src="config.js"></script>
+  <script src="assets/api.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📊<span class="label"> 매출 통계</span></h1>
+      <div class="nav">
+        <a class="nav-btn" href="pos.html">←<span class="label"> POS</span></a>
+        <a class="nav-btn" href="stockin.html">📥<span class="label"> 입고</span></a>
+        <a class="nav-btn" href="admin.html">📋<span class="label"> 제품관리</span></a>
+        <a class="nav-btn" href="qr.html">🏷️<span class="label"> QR</span></a>
+        <button class="nav-btn primary" onclick="loadStats()">🔄<span class="label"> 새로고침</span></button>
+      </div>
+    </header>
+
+    <div class="period-tabs">
+      <button class="period-tab active" data-period="today" onclick="changePeriod('today')">오늘</button>
+      <button class="period-tab" data-period="week" onclick="changePeriod('week')">최근 7일</button>
+      <button class="period-tab" data-period="month" onclick="changePeriod('month')">이번달</button>
+      <button class="period-tab" data-period="year" onclick="changePeriod('year')">올해</button>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card primary">
+        <div class="label">총 매출</div>
+        <div class="value" id="sumAmount">-</div>
+        <div class="sub" id="sumPeriodLabel"></div>
+      </div>
+      <div class="summary-card">
+        <div class="label">거래 수</div>
+        <div class="value" id="sumCount">-</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">객단가</div>
+        <div class="value" id="sumAvg">-</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">현금 / Venmo</div>
+        <div class="value" id="sumPayment" style="font-size:16px;">-</div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <h3>📈 매출 추이</h3>
+        <div class="chart-wrapper"><canvas id="dailyChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>💳 결제수단 비율</h3>
+        <div class="chart-wrapper"><canvas id="paymentChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="charts-grid" style="grid-template-columns: 1fr;">
+      <div class="chart-card">
+        <h3>🕐 시간대별 매출</h3>
+        <div class="chart-wrapper"><canvas id="hourlyChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="bottom-grid">
+      <div class="chart-card">
+        <h3>🏆 베스트셀러 TOP 10</h3>
+        <div id="topProducts"><div class="empty-state"><span class="loading"></span></div></div>
+      </div>
+      <div class="chart-card">
+        <h3>📋 최근 거래</h3>
+        <div id="recentSales"><div class="empty-state"><span class="loading"></span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentPeriod = 'today';
+    let dailyChart, hourlyChart, paymentChart;
+
+    const PERIOD_LABEL = {
+      today: '오늘',
+      week:  '최근 7일',
+      month: '이번달',
+      year:  '올해'
+    };
+
+    window.addEventListener('load', () => {
+      loadStats();
+      loadRecentSales();
+    });
+
+    function changePeriod(p) {
+      currentPeriod = p;
+      document.querySelectorAll('.period-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.period === p);
+      });
+      loadStats();
+    }
+
+    function loadStats() {
+      document.getElementById('sumAmount').innerHTML = '<span class="loading"></span>';
+      api('getStats', { period: currentPeriod })
+        .then(res => { (onStatsLoaded)(res); })
+        .catch(err => { (err => {
+          document.getElementById('sumAmount').textContent = '오류';
+          console.error(err);
+        })(err); });
+    }
+
+    function onStatsLoaded(res) {
+      if (!res.success) return;
+      const s = res.summary;
+      document.getElementById('sumAmount').textContent  = fmtUSD(s.totalAmount);
+      document.getElementById('sumCount').textContent   = s.totalCount + '건';
+      document.getElementById('sumAvg').textContent     = fmtUSD(s.avgTicket);
+      document.getElementById('sumPayment').textContent =
+        `${fmtUSD(s.cashAmount)} / ${fmtUSD(s.venmoAmount)}`;
+      document.getElementById('sumPeriodLabel').textContent = PERIOD_LABEL[currentPeriod];
+
+      renderDailyChart(res.daily);
+      renderHourlyChart(res.hourly);
+      renderPaymentChart(res.paymentMix);
+      renderTopProducts(res.topProducts);
+    }
+
+    function renderDailyChart(daily) {
+      const ctx = document.getElementById('dailyChart');
+      if (dailyChart) dailyChart.destroy();
+      const labels = daily.map(d => d.date.slice(5));
+      const data   = daily.map(d => d.amount);
+      dailyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels.length ? labels : ['데이터 없음'],
+          datasets: [{
+            label: '매출',
+            data: data.length ? data : [0],
+            borderColor: '#007aff',
+            backgroundColor: 'rgba(0,122,255,0.1)',
+            tension: 0.3, fill: true,
+            pointRadius: 4, pointBackgroundColor: '#007aff'
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => fmtUSD(ctx.parsed.y)
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { callback: v => (v / 1000) + 'K' }
+            }
+          }
+        }
+      });
+    }
+
+    function renderHourlyChart(hourly) {
+      const ctx = document.getElementById('hourlyChart');
+      if (hourlyChart) hourlyChart.destroy();
+      hourlyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: hourly.map(h => h.hour + '시'),
+          datasets: [{
+            label: '매출',
+            data: hourly.map(h => h.amount),
+            backgroundColor: hourly.map(h => h.amount > 0 ? '#34c759' : '#e5e5ea'),
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const h = hourly[ctx.dataIndex];
+                  return `${fmtUSD(h.amount)} (${h.count}건)`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { callback: v => (v / 1000) + 'K' }
+            }
+          }
+        }
+      });
+    }
+
+    function renderPaymentChart(mix) {
+      const ctx = document.getElementById('paymentChart');
+      if (paymentChart) paymentChart.destroy();
+      const total = mix.cash + mix.venmo;
+      paymentChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['현금', 'Venmo'],
+          datasets: [{
+            data: total > 0 ? [mix.cash, mix.venmo] : [1, 0],
+            backgroundColor: ['#34c759', '#3D95CE'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          cutout: '65%',
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 12 } } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  if (total === 0) return '데이터 없음';
+                  const pct = Math.round(ctx.parsed / total * 100);
+                  return `${ctx.label}: ${fmtUSD(ctx.parsed)} (${pct}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderTopProducts(products) {
+      const c = document.getElementById('topProducts');
+      if (!products || products.length === 0) {
+        c.innerHTML = '<div class="empty-state">데이터 없음</div>';
+        return;
+      }
+      c.innerHTML = products.map((p, i) => `
+        <div class="product-row">
+          <div class="product-rank">${i + 1}</div>
+          <div class="product-info-col">
+            <div class="pname">${escapeHtml(p.name)}</div>
+            <div class="pmeta">${p.qty}개 판매 · ${p.id}</div>
+          </div>
+          <div class="product-amount">${fmtUSD(p.amount)}</div>
+        </div>
+      `).join('');
+    }
+
+    function loadRecentSales() {
+      api('getRecentSales', { limit: 15 })
+        .then(res => { (onRecentSalesLoaded)(res); })
+        .catch(err => { (err => console.error(err))(err); });
+    }
+
+    function onRecentSalesLoaded(res) {
+      const c = document.getElementById('recentSales');
+      if (!res.success || !res.sales || res.sales.length === 0) {
+        c.innerHTML = '<div class="empty-state">거래 내역 없음</div>';
+        return;
+      }
+      c.innerHTML = `
+        <table class="sales-table">
+          <thead>
+            <tr><th>시간</th><th>항목</th><th>결제</th><th class="amt">금액</th></tr>
+          </thead>
+          <tbody>
+            ${res.sales.map(s => {
+              const d = new Date(s.date);
+              const tt = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+              const dd = d.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
+              const methodClass = s.method === '현금' ? 'cash' : 'venmo';
+              const isRefund = s.status === '환불됨';
+              return `
+                <tr style="${isRefund ? 'opacity:0.5; text-decoration:line-through;' : ''}">
+                  <td>${dd} ${tt}</td>
+                  <td>${s.itemCount}종/${s.totalQty}개</td>
+                  <td><span class="method ${methodClass}">${escapeHtml(s.method)}</span>
+                      ${isRefund ? '<div class="status-refund">환불</div>' : ''}</td>
+                  <td class="amt">${fmtUSD(s.amount)}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[m]));
+    }
+    function fmtUSD(amount) {
+      const n = Number(amount) || 0;
+      return '$' + n.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR 코드 생성기</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"
+          onerror="this.onerror=null;this.src='https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js'"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+          onerror="this.onerror=null;this.src='https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      padding: 16px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    header {
+      background: white;
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    header h1 { font-size: 20px; font-weight: 700; }
+    header .nav {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .nav-btn {
+      padding: 8px 14px; background: #f5f5f7; color: #1d1d1f;
+      border: none; border-radius: 8px; font-size: 13px;
+      text-decoration: none; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .nav-btn.primary { background: #1d1d1f; color: white; }
+    .nav-btn.success { background: #34c759; color: white; }
+    .nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .panel {
+      background: white;
+      padding: 18px 20px;
+      border-radius: 12px;
+      margin-bottom: 14px;
+    }
+    .panel h2 {
+      font-size: 14px; font-weight: 600;
+      margin-bottom: 12px; color: #1d1d1f;
+    }
+    .panel-row {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .option-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #8e8e93;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .option-group select,
+    .option-group input[type="number"],
+    .option-group input[type="text"] {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #e5e5ea;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      background: white;
+    }
+    .checkbox-row {
+      display: flex; gap: 14px; flex-wrap: wrap;
+      align-items: center;
+    }
+    .checkbox-row label {
+      display: inline-flex; align-items: center;
+      gap: 6px; font-size: 13px; cursor: pointer;
+      text-transform: none; letter-spacing: 0;
+      font-weight: 400; color: #1d1d1f; margin-bottom: 0;
+    }
+    .checkbox-row input[type="checkbox"] {
+      width: 18px; height: 18px;
+    }
+
+    .info-row {
+      font-size: 12px; color: #8e8e93;
+      padding: 10px 14px;
+      background: #f5f5f7;
+      border-radius: 8px;
+      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .qr-grid {
+      display: grid;
+      gap: 8px;
+    }
+    .qr-card {
+      background: white;
+      border: 1px dashed #c7c7cc;
+      padding: 10px;
+      text-align: center;
+      border-radius: 6px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      position: relative;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    .qr-card canvas { display: block; margin: 0 auto; }
+    .qr-name {
+      font-weight: 700;
+      font-size: 12px; margin-top: 5px;
+      word-break: keep-all; line-height: 1.2;
+    }
+    .qr-id {
+      font-size: 10px;
+      color: #8e8e93;
+      font-family: Menlo, Consolas, monospace;
+      margin-top: 2px;
+    }
+    .qr-price {
+      font-size: 11px;
+      color: #ff3b30;
+      margin-top: 2px;
+      font-weight: 600;
+    }
+    .qr-category {
+      position: absolute;
+      top: 4px; left: 4px;
+      font-size: 9px;
+      background: #f5f5f7;
+      color: #666;
+      padding: 1px 6px;
+      border-radius: 8px;
+    }
+    .download-btn {
+      position: absolute;
+      top: 4px; right: 4px;
+      width: 22px; height: 22px;
+      padding: 0; border: none;
+      border-radius: 50%;
+      background: rgba(0,122,255,0.1);
+      color: #007aff;
+      font-size: 12px;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s;
+      cursor: pointer;
+    }
+    .qr-card:hover .download-btn { opacity: 1; }
+
+    .empty {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 60px 20px;
+      color: #8e8e93;
+      background: white;
+      border-radius: 12px;
+    }
+    .loading {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .toast {
+      position: fixed;
+      top: 20px; left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(29,29,31,0.95);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 24px;
+      z-index: 2000; opacity: 0;
+      transition: all 0.3s;
+      font-size: 14px;
+      max-width: 90%;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.success { background: #34c759; }
+    .toast.error { background: #ff3b30; }
+
+    @media (max-width: 768px) {
+      .options-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 480px) {
+      header h1 { font-size: 14px; }
+      header h1 .label { display: none; }
+      .nav-btn { padding: 5px 8px; font-size: 11px; }
+      .nav-btn .label { display: none; }
+      .options-grid { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      body { background: white; padding: 0; }
+      header, .panel, .info-row, .toast { display: none !important; }
+      .qr-card { border: 1px dashed #ccc; break-inside: avoid; }
+      .qr-grid { gap: 0 !important; max-width: none !important; }
+      @page { margin: 8mm; }
+    }
+  </style>
+<script src="config.js"></script>
+  <script src="assets/api.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🏷️<span class="label"> QR 코드 생성기</span></h1>
+      <div class="nav">
+        <a class="nav-btn" href="pos.html">←<span class="label"> POS</span></a>
+        <a class="nav-btn" href="stockin.html">📥<span class="label"> 입고</span></a>
+        <a class="nav-btn" href="admin.html">📋<span class="label"> 제품관리</span></a>
+        <a class="nav-btn" href="stats.html">📊<span class="label"> 통계</span></a>
+        <button class="nav-btn primary" onclick="window.print()">🖨️<span class="label"> 인쇄</span></button>
+        <button class="nav-btn success" onclick="downloadAllAsZip()" id="zipBtn">📦<span class="label"> 전체 ZIP</span></button>
+      </div>
+    </header>
+
+    <div class="panel">
+      <h2>인쇄 옵션</h2>
+      <div class="options">
+        <div class="option-group">
+          <label>스티커 용지 규격</label>
+          <select id="presetSelect" onchange="applyPreset()">
+            <option value="custom">사용자 지정</option>
+            <optgroup label="A4 (한국 폼텍)">
+              <option value="formtec-3107">폼텍 LS-3107 (44칸, 25×40mm)</option>
+              <option value="formtec-3104" selected>폼텍 LS-3104 (24칸, 35×70mm)</option>
+              <option value="formtec-3110">폼텍 LS-3110 (10칸, 50×100mm)</option>
+            </optgroup>
+            <optgroup label="Letter (미국 Avery)">
+              <option value="avery-22806">Avery 22806 정사각 (12칸, 2&quot;×2&quot;)</option>
+              <option value="avery-22816">Avery 22816 정사각 (9칸, 2.5&quot;×2.5&quot;)</option>
+              <option value="avery-5160">Avery 5160 (30칸, 1&quot;×2.625&quot;)</option>
+              <option value="avery-5163">Avery 5163 배송 (10칸, 2&quot;×4&quot;)</option>
+            </optgroup>
+            <optgroup label="자유 배치">
+              <option value="grid-small">소형 (80px)</option>
+              <option value="grid-medium">중형 (120px)</option>
+              <option value="grid-large">대형 (180px)</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>QR 크기 (px)</label>
+          <input type="number" id="qrSize" value="100" min="40" max="400" step="10" onchange="renderQRs()">
+        </div>
+        <div class="option-group">
+          <label>오류 정정 레벨</label>
+          <select id="errorLevel" onchange="renderQRs()">
+            <option value="L">L (낮음, 7%)</option>
+            <option value="M" selected>M (중간, 15%)</option>
+            <option value="Q">Q (높음, 25%)</option>
+            <option value="H">H (최고, 30%)</option>
+          </select>
+        </div>
+        <div class="option-group" style="grid-column: 1 / -1;">
+          <label>표시 항목</label>
+          <div class="checkbox-row">
+            <label><input type="checkbox" id="showName" checked onchange="renderQRs()"> 제품명</label>
+            <label><input type="checkbox" id="showId" checked onchange="renderQRs()"> 제품ID</label>
+            <label><input type="checkbox" id="showPrice" onchange="renderQRs()"> 가격</label>
+            <label><input type="checkbox" id="showCategory" onchange="renderQRs()"> 카테고리</label>
+          </div>
+        </div>
+        <div class="option-group" style="grid-column: 1 / -1;">
+          <div id="paperInfo" style="background: #fff8e5; border: 1px solid #ffe5a3; color: #8a5a00; padding: 8px 12px; border-radius: 8px; font-size: 12px; display: none; align-items: center;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>제품 필터</h2>
+      <div class="panel-row" style="gap: 8px;">
+        <input type="text" id="searchBox" placeholder="🔍 제품명, ID, 카테고리로 검색..."
+               oninput="renderQRs()"
+               style="flex: 1; min-width: 200px; padding: 10px 14px; border: 1px solid #e5e5ea; border-radius: 8px; font-size: 14px; font-family: inherit;">
+        <select id="categoryFilter" onchange="renderQRs()"
+                style="padding: 10px 14px; border: 1px solid #e5e5ea; border-radius: 8px; font-size: 14px; font-family: inherit; background: white;">
+          <option value="all">전체 카테고리</option>
+        </select>
+        <button class="nav-btn" onclick="reload()">🔄</button>
+      </div>
+    </div>
+
+    <div class="info-row" id="infoRow">
+      <span class="loading"></span> 제품 목록 불러오는 중...
+    </div>
+
+    <div class="qr-grid" id="grid">
+      <div class="empty"><span class="loading"></span> 생성 중...</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const PRESETS = {
+      // ─── A4 (한국 폼텍) ───
+      'formtec-3107': { cols: 4,  cellW: 47.5,  cellH: 25,    qrSize: 70,  paddingMm: 1.5, paper: 'A4' },
+      'formtec-3104': { cols: 3,  cellW: 70,    cellH: 35,    qrSize: 90,  paddingMm: 2,   paper: 'A4' },
+      'formtec-3110': { cols: 2,  cellW: 100,   cellH: 50,    qrSize: 130, paddingMm: 3,   paper: 'A4' },
+      // ─── Letter (미국 Avery) — 1" = 25.4mm ───
+      'avery-22806':  { cols: 3,  cellW: 50.8,  cellH: 50.8,  qrSize: 130, paddingMm: 2,   paper: 'letter' },
+      'avery-22816':  { cols: 3,  cellW: 63.5,  cellH: 63.5,  qrSize: 160, paddingMm: 3,   paper: 'letter' },
+      'avery-5160':   { cols: 3,  cellW: 66.7,  cellH: 25.4,  qrSize: 70,  paddingMm: 1.5, paper: 'letter' },
+      'avery-5163':   { cols: 2,  cellW: 101.6, cellH: 50.8,  qrSize: 130, paddingMm: 2,   paper: 'letter' },
+      // ─── 자유 배치 ───
+      'grid-small':   { cols: null, qrSize: 80 },
+      'grid-medium':  { cols: null, qrSize: 120 },
+      'grid-large':   { cols: null, qrSize: 180 }
+    };
+
+    let allProducts = [];
+    let categories = [];
+
+    window.addEventListener('load', () => {
+      reload();
+    });
+
+    function reload() {
+      document.getElementById('infoRow').innerHTML =
+        '<span class="loading"></span> 제품 목록 불러오는 중...';
+      document.getElementById('grid').innerHTML =
+        '<div class="empty"><span class="loading"></span> 불러오는 중...</div>';
+
+      api('getProducts')
+        .then(res => { (onLoaded)(res); })
+        .catch(err => { (err => {
+          document.getElementById('infoRow').textContent = '오류: ' + (err.message || err);
+          document.getElementById('grid').innerHTML =
+            '<div class="empty">데이터를 불러올 수 없습니다</div>';
+        })(err); });
+    }
+
+    function onLoaded(res) {
+      if (!res.success) {
+        showToast(res.message || '오류 발생', 'error');
+        return;
+      }
+      allProducts = res.products || [];
+      categories = res.categories || ['전체'];
+
+      const select = document.getElementById('categoryFilter');
+      select.innerHTML = '<option value="all">전체 카테고리</option>' +
+        categories.filter(c => c !== '전체').map(c =>
+          `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`
+        ).join('');
+
+      document.getElementById('infoRow').innerHTML =
+        `📦 총 <strong>${allProducts.length}</strong>개 제품 · ${categories.length - 1}개 카테고리`;
+
+      applyPreset();
+    }
+
+    function applyPreset() {
+      const key = document.getElementById('presetSelect').value;
+      updatePrintPaper(key);
+      if (key === 'custom') { renderQRs(); return; }
+      document.getElementById('qrSize').value = PRESETS[key].qrSize;
+      renderQRs();
+    }
+
+    function updatePrintPaper(key) {
+      let style = document.getElementById('dynamicPageStyle');
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'dynamicPageStyle';
+        document.head.appendChild(style);
+      }
+      const preset = PRESETS[key];
+      let css;
+      if (preset && preset.paper === 'letter') {
+        css = '@media print { @page { size: letter; margin: 0.5in; } }';
+      } else if (preset && preset.paper === 'A4') {
+        css = '@media print { @page { size: A4; margin: 8mm; } }';
+      } else {
+        css = '@media print { @page { margin: 8mm; } }';
+      }
+      style.textContent = css;
+
+      const infoBox = document.getElementById('paperInfo');
+      if (infoBox) {
+        if (preset && preset.paper) {
+          const paperLabel = preset.paper === 'letter' ? 'Letter (미국)' : 'A4 (한국/유럽)';
+          infoBox.style.display = 'flex';
+          infoBox.innerHTML = `🖨️ 인쇄 시 <strong style="margin: 0 4px;">${paperLabel}</strong> 용지를 사용하세요`;
+        } else {
+          infoBox.style.display = 'none';
+        }
+      }
+    }
+
+    function renderQRs() {
+      const grid         = document.getElementById('grid');
+
+      // QR 라이브러리 로딩 체크
+      if (typeof QRCode === 'undefined') {
+        grid.innerHTML = `
+          <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #ff3b30; background: #ffe5e1; border-radius: 12px;">
+            ⚠️ QR 라이브러리 로딩 실패<br>
+            <span style="font-size: 13px; color: #666;">네트워크를 확인하고 페이지를 새로고침하세요 (Ctrl+R)</span>
+          </div>`;
+        return;
+      }
+
+      const presetKey    = document.getElementById('presetSelect').value;
+      const search       = document.getElementById('searchBox').value.trim().toLowerCase();
+      const catFilter    = document.getElementById('categoryFilter').value;
+      const qrSize       = parseInt(document.getElementById('qrSize').value, 10) || 100;
+      const errLevel     = document.getElementById('errorLevel').value;
+      const showName     = document.getElementById('showName').checked;
+      const showId       = document.getElementById('showId').checked;
+      const showPrice    = document.getElementById('showPrice').checked;
+      const showCategory = document.getElementById('showCategory').checked;
+
+      const preset = PRESETS[presetKey];
+      if (preset && preset.cols) {
+        grid.style.gridTemplateColumns = `repeat(${preset.cols}, ${preset.cellW}mm)`;
+        grid.style.justifyContent = 'center';
+      } else {
+        grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${qrSize + 40}px, 1fr))`;
+        grid.style.justifyContent = 'initial';
+      }
+
+      const filtered = allProducts.filter(p => {
+        if (catFilter !== 'all' && p.category !== catFilter) return false;
+        if (!search) return true;
+        return p.id.toLowerCase().includes(search) ||
+               p.name.toLowerCase().includes(search) ||
+               (p.category || '').toLowerCase().includes(search);
+      });
+
+      grid.innerHTML = '';
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '<div class="empty">' +
+          (allProducts.length === 0
+            ? 'Products 시트에 제품이 없습니다'
+            : '필터에 맞는 제품이 없습니다') +
+          '</div>';
+        return;
+      }
+
+      filtered.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'qr-card';
+
+        if (preset && preset.cellH) {
+          card.style.height  = preset.cellH + 'mm';
+          card.style.width   = preset.cellW + 'mm';
+          card.style.padding = preset.paddingMm + 'mm';
+        }
+
+        if (showCategory && p.category) {
+          const catEl = document.createElement('div');
+          catEl.className = 'qr-category';
+          catEl.textContent = p.category;
+          card.appendChild(catEl);
+        }
+
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'download-btn';
+        dlBtn.textContent = '↓';
+        dlBtn.title = 'PNG 다운로드';
+        dlBtn.onclick = (e) => { e.stopPropagation(); downloadSingle(p, errLevel); };
+        card.appendChild(dlBtn);
+
+        const canvas = document.createElement('canvas');
+        card.appendChild(canvas);
+
+        if (showName) {
+          const name = document.createElement('div');
+          name.className = 'qr-name';
+          name.textContent = p.name;
+          card.appendChild(name);
+        }
+        if (showId) {
+          const id = document.createElement('div');
+          id.className = 'qr-id';
+          id.textContent = p.id;
+          card.appendChild(id);
+        }
+        if (showPrice && p.price > 0) {
+          const price = document.createElement('div');
+          price.className = 'qr-price';
+          price.textContent = fmtUSD(p.price);
+          card.appendChild(price);
+        }
+
+        grid.appendChild(card);
+
+        QRCode.toCanvas(canvas, p.id, {
+          width: qrSize,
+          margin: 1,
+          errorCorrectionLevel: errLevel
+        }, err => { if (err) console.error(err); });
+      });
+
+      const filterCount = filtered.length;
+      const totalCount  = allProducts.length;
+      const counterText = filterCount === totalCount
+        ? `📦 총 <strong>${totalCount}</strong>개 제품`
+        : `🔍 <strong>${filterCount}</strong>개 표시 중 (전체 ${totalCount}개)`;
+      document.getElementById('infoRow').innerHTML = counterText;
+    }
+
+    function downloadSingle(product, errLevel) {
+      QRCode.toDataURL(product.id, {
+        width: 400,
+        margin: 2,
+        errorCorrectionLevel: errLevel
+      }, (err, dataUrl) => {
+        if (err) { showToast('생성 실패: ' + err.message, 'error'); return; }
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        const safeName = String(product.name).replace(/[\\/:*?"<>|]/g, '_');
+        a.download = `qr_${product.id}_${safeName}.png`;
+        a.click();
+        showToast(`${product.name} 다운로드`, 'success');
+      });
+    }
+
+    async function downloadAllAsZip() {
+      const search = document.getElementById('searchBox').value.trim().toLowerCase();
+      const catFilter = document.getElementById('categoryFilter').value;
+      const filtered = allProducts.filter(p => {
+        if (catFilter !== 'all' && p.category !== catFilter) return false;
+        if (!search) return true;
+        return p.id.toLowerCase().includes(search) ||
+               p.name.toLowerCase().includes(search);
+      });
+
+      if (filtered.length === 0) {
+        showToast('다운로드할 제품이 없습니다', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('zipBtn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading"></span> 생성 중...';
+
+      const errLevel = document.getElementById('errorLevel').value;
+      const zip = new JSZip();
+
+      try {
+        for (const p of filtered) {
+          const dataUrl = await new Promise((resolve, reject) => {
+            QRCode.toDataURL(p.id, {
+              width: 400, margin: 2, errorCorrectionLevel: errLevel
+            }, (err, url) => err ? reject(err) : resolve(url));
+          });
+          const base64 = dataUrl.split(',')[1];
+          const safeName = String(p.name).replace(/[\\/:*?"<>|]/g, '_');
+          const folder = p.category ? `${p.category}/` : '';
+          zip.file(`${folder}${p.id}_${safeName}.png`, base64, { base64: true });
+        }
+
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `QR_Codes_${new Date().toISOString().slice(0, 10)}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        showToast(`${filtered.length}개 QR 코드 ZIP 다운로드 완료`, 'success');
+      } catch (err) {
+        showToast('ZIP 생성 실패: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
+
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show ' + (type || '');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[m]));
+    }
+    function fmtUSD(amount) {
+      const n = Number(amount) || 0;
+      return '$' + n.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+  </script>
+</body>
+</html>

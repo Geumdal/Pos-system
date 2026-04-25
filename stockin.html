@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>입고 처리</title>
+  <meta http-equiv="Permissions-Policy" content="camera=*, microphone=*">
+  <meta name="permissions-policy" content="camera=*">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      font-size: 14px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button { font-family: inherit; cursor: pointer; }
+
+    .app {
+      max-width: 900px; margin: 0 auto;
+      padding: 16px;
+    }
+
+    header {
+      background: white;
+      border-radius: 14px;
+      padding: 14px 18px;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    header h1 { font-size: 18px; font-weight: 700; }
+    .nav { display: flex; gap: 6px; flex-wrap: wrap; }
+    .nav-btn {
+      padding: 7px 12px; background: #f5f5f7; color: #1d1d1f;
+      border: none; border-radius: 8px; font-size: 12px;
+      text-decoration: none; cursor: pointer; font-family: inherit;
+    }
+    .nav-btn.primary { background: #007aff; color: white; }
+
+    /* 요약 카드 */
+    .summary-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .summary-card {
+      background: #1d1d1f;
+      color: white;
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .summary-card .l {
+      font-size: 11px;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 4px;
+    }
+    .summary-card .v {
+      font-size: 22px; font-weight: 700;
+    }
+
+    /* 메인 영역 */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .panel {
+      background: white;
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .panel h2 {
+      font-size: 14px; font-weight: 600;
+      margin-bottom: 12px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .panel h2 .badge {
+      font-size: 11px; color: #8e8e93; font-weight: 400;
+    }
+
+    /* 카메라 영역 */
+    #scanReader {
+      width: 100%;
+      min-height: 280px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      margin-bottom: 10px;
+    }
+    .scan-status {
+      text-align: center;
+      padding: 8px;
+      font-size: 13px;
+      color: #666;
+      background: #f5f5f7;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .scan-status.success { color: #34c759; background: #d4f4dd; }
+    .scan-status.error   { color: #ff3b30; background: #ffe5e1; }
+
+    .manual-entry-btn {
+      width: 100%;
+      padding: 14px;
+      background: white;
+      border: 1.5px solid #007aff;
+      color: #007aff;
+      border-radius: 10px;
+      font-size: 14px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .manual-entry-btn:active { transform: scale(0.98); }
+
+    /* 입고 내역 */
+    .history-list {
+      max-height: 480px;
+      overflow-y: auto;
+    }
+    .history-item {
+      padding: 12px 0;
+      border-bottom: 1px solid #f5f5f7;
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-item .hi-row1 {
+      display: flex; justify-content: space-between;
+      align-items: baseline; margin-bottom: 4px;
+    }
+    .history-item .hi-name {
+      font-size: 14px; font-weight: 600;
+    }
+    .history-item .hi-qty {
+      font-size: 16px; font-weight: 700;
+      color: #34c759;
+    }
+    .history-item .hi-row2 {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: #8e8e93;
+    }
+    .history-item .hi-id {
+      font-family: Menlo, Consolas, monospace;
+      background: #f5f5f7;
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .empty-history {
+      text-align: center;
+      padding: 40px 20px;
+      color: #8e8e93;
+      font-size: 13px;
+    }
+    .loading {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 모달 */
+    .modal-bd {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .modal-bd.active { display: flex; }
+    .modal {
+      background: white;
+      border-radius: 18px;
+      width: 100%; max-width: 460px;
+      max-height: 90vh; overflow-y: auto;
+      padding: 22px;
+    }
+
+    .product-display {
+      text-align: center;
+      padding: 16px;
+      background: #f5f5f7;
+      border-radius: 14px;
+      margin-bottom: 16px;
+    }
+    .product-display .pname {
+      font-size: 20px; font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .product-display .pmeta {
+      font-size: 12px; color: #8e8e93;
+    }
+    .product-display .pmeta .id {
+      font-family: Menlo, Consolas, monospace;
+      background: white;
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .product-display .stock-current {
+      font-size: 14px; margin-top: 10px;
+      color: #1d1d1f;
+    }
+    .product-display .stock-current .num {
+      font-size: 20px; font-weight: 700;
+    }
+
+    .qty-section {
+      margin-bottom: 18px;
+    }
+    .qty-label {
+      font-size: 12px; font-weight: 600;
+      color: #666;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .qty-input-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 60px;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .qty-input {
+      padding: 14px;
+      font-size: 24px; font-weight: 700; text-align: center;
+      border: 2px solid #e5e5ea;
+      border-radius: 10px; font-family: inherit;
+      width: 100%;
+    }
+    .qty-input:focus {
+      outline: none; border-color: #007aff;
+    }
+    .qty-step-btn {
+      padding: 14px;
+      background: #f5f5f7;
+      border: none;
+      border-radius: 10px;
+      font-size: 22px;
+      font-weight: 600;
+    }
+    .qty-step-btn:active { background: #e5e5ea; }
+    .qty-quick-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .qty-quick-btn {
+      padding: 10px 4px;
+      background: white;
+      border: 1px solid #e5e5ea;
+      border-radius: 8px;
+      font-size: 13px; font-weight: 600;
+    }
+    .qty-quick-btn:active {
+      background: #007aff; color: white; border-color: #007aff;
+    }
+
+    .preview-stock {
+      background: #d4f4dd;
+      border: 1px solid #34c759;
+      color: #1c7c2f;
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .preview-stock .new-num {
+      font-size: 22px; font-weight: 700;
+    }
+
+    .modal-actions {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 8px;
+    }
+    .btn {
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px; font-weight: 600;
+      font-family: inherit;
+    }
+    .btn-cancel  { background: #e5e5ea; color: #1d1d1f; }
+    .btn-confirm { background: #34c759; color: white; }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* 직접 입력 모달의 검색 결과 */
+    .manual-search-input {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 17px;
+      border: 2px solid #e5e5ea;
+      border-radius: 12px; font-family: inherit;
+      margin-bottom: 12px;
+    }
+    .manual-search-input:focus {
+      outline: none; border-color: #007aff;
+    }
+    .manual-results {
+      max-height: 50vh; overflow-y: auto;
+      border: 1px solid #e5e5ea;
+      border-radius: 12px;
+      background: white;
+    }
+    .manual-result-item {
+      padding: 12px 14px;
+      border-bottom: 1px solid #f5f5f7;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px; align-items: center;
+      cursor: pointer;
+    }
+    .manual-result-item:last-child { border-bottom: none; }
+    .manual-result-item:active { background: #f5f5f7; }
+    .manual-result-item .mri-name { font-size: 14px; font-weight: 600; }
+    .manual-result-item .mri-meta { font-size: 11px; color: #8e8e93; margin-top: 2px; }
+    .manual-result-item .mri-action {
+      background: #007aff; color: white;
+      padding: 8px 14px; border: none;
+      border-radius: 8px; font-size: 13px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .manual-empty {
+      padding: 30px 20px; text-align: center;
+      color: #8e8e93; font-size: 13px;
+    }
+
+    /* 토스트 */
+    .toast {
+      position: fixed;
+      top: 20px; left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(29,29,31,0.95); color: white;
+      padding: 12px 20px; border-radius: 24px;
+      z-index: 2000; opacity: 0;
+      transition: all 0.3s; font-size: 14px;
+      max-width: 90%; text-align: center;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.success { background: #34c759; }
+    .toast.error   { background: #ff3b30; }
+
+    @media (max-width: 768px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .history-list { max-height: 280px; }
+    }
+    @media (max-width: 480px) {
+      header h1 { font-size: 14px; }
+      .nav-btn { padding: 5px 8px; font-size: 11px; }
+      .nav-btn .label { display: none; }
+      header h1 .label { display: none; }
+    }
+  </style>
+<script src="config.js"></script>
+  <script src="assets/api.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>📥<span class="label"> 입고 처리</span></h1>
+      <div class="nav">
+        <a class="nav-btn" href="pos.html">←<span class="label"> POS</span></a>
+        <a class="nav-btn" href="admin.html">📋<span class="label"> 제품관리</span></a>
+        <a class="nav-btn" href="qr.html">🏷️<span class="label"> QR</span></a>
+        <a class="nav-btn" href="stats.html">📊<span class="label"> 통계</span></a>
+      </div>
+    </header>
+
+    <div class="summary-row">
+      <div class="summary-card">
+        <div class="l">오늘 입고 횟수</div>
+        <div class="v" id="sumCount">-</div>
+      </div>
+      <div class="summary-card">
+        <div class="l">오늘 입고 수량</div>
+        <div class="v" id="sumQty">-</div>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div class="panel">
+        <h2>
+          📷 QR 스캔
+          <span class="badge">제품 라벨에 카메라 비추기</span>
+        </h2>
+        <div id="scanReader"></div>
+        <div class="scan-status" id="scanStatus">카메라 준비 중...</div>
+        <button class="manual-entry-btn" onclick="openManualEntry()">
+          ⌨️ 직접 입력 (QR 손상/분실 시)
+        </button>
+      </div>
+
+      <div class="panel">
+        <h2>
+          📋 최근 입고 내역
+          <span class="badge" id="historyBadge"></span>
+        </h2>
+        <div class="history-list" id="historyList">
+          <div class="empty-history"><span class="loading"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 입고 수량 입력 모달 -->
+  <div class="modal-bd" id="quantityModal">
+    <div class="modal">
+      <div class="product-display">
+        <div class="pname" id="qmName">-</div>
+        <div class="pmeta">
+          <span class="id" id="qmId">-</span> ·
+          <span id="qmCategory">-</span> ·
+          <span id="qmPrice">-</span>
+        </div>
+        <div class="stock-current">
+          현재 재고 <span class="num" id="qmCurrentStock">-</span>개
+        </div>
+      </div>
+
+      <div class="qty-section">
+        <div class="qty-label">입고 수량</div>
+        <div class="qty-input-row">
+          <button class="qty-step-btn" onclick="adjustQty(-1)">−</button>
+          <input type="number" class="qty-input" id="qmQty" value="1" min="1" oninput="updatePreview()">
+          <button class="qty-step-btn" onclick="adjustQty(1)">+</button>
+        </div>
+        <div class="qty-quick-row">
+          <button class="qty-quick-btn" onclick="setQty(1)">1</button>
+          <button class="qty-quick-btn" onclick="setQty(5)">5</button>
+          <button class="qty-quick-btn" onclick="setQty(10)">10</button>
+          <button class="qty-quick-btn" onclick="setQty(50)">50</button>
+        </div>
+      </div>
+
+      <div class="preview-stock">
+        <span>입고 후 재고</span>
+        <span class="new-num" id="qmNewStock">-</span>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closeQuantityModal()">취소</button>
+        <button class="btn btn-confirm" id="qmConfirm" onclick="confirmStockIn()">입고 완료 ✓</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 직접 입력 모달 -->
+  <div class="modal-bd" id="manualEntryModal">
+    <div class="modal">
+      <h2 style="font-size: 18px; margin-bottom: 6px; font-weight: 600;">⌨️ 제품 직접 입력</h2>
+      <div style="font-size: 12px; color: #8e8e93; margin-bottom: 14px;">
+        제품ID 또는 제품명 일부를 입력하세요.
+      </div>
+      <input type="text" class="manual-search-input" id="manualSearchInput"
+             placeholder="제품ID 또는 제품명..." autocomplete="off"
+             oninput="updateManualResults()"
+             onkeydown="onManualKeyDown(event)">
+      <div class="manual-results" id="manualResults"></div>
+      <div class="modal-actions" style="margin-top: 14px;">
+        <button class="btn btn-cancel" onclick="closeManualEntry()" style="grid-column: 1 / -1;">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script>
+    let allProducts = [];
+    let currentProduct = null;
+    let scanner = null;
+    let scanning = true;
+    let lastScan = { code: '', time: 0 };
+
+    /* ─── 초기 로드 ─── */
+    window.addEventListener('load', () => {
+      loadProducts();
+      loadHistory();
+      loadSummary();
+      startScanner();
+    });
+
+    function loadProducts() {
+      api('getProducts')
+        .then(res => { (res => {
+          if (res.success) allProducts = res.products || [];
+        })(res); });
+    }
+
+    function loadSummary() {
+      api('getTodayStockInSummary')
+        .then(res => { (res => {
+          if (!res.success) return;
+          document.getElementById('sumCount').textContent = res.count + '건';
+          document.getElementById('sumQty').textContent = res.totalQty + '개';
+        })(res); });
+    }
+
+    function loadHistory() {
+      api('getRecentStockIn', { limit: 30 })
+        .then(res => { (onHistoryLoaded)(res); })
+        .catch(err => { (err => {
+          document.getElementById('historyList').innerHTML =
+            '<div class="empty-history">불러올 수 없습니다</div>';
+        })(err); });
+    }
+
+    function onHistoryLoaded(res) {
+      const c = document.getElementById('historyList');
+      if (!res.success || !res.stockIns || res.stockIns.length === 0) {
+        c.innerHTML = '<div class="empty-history">아직 입고 내역이 없습니다</div>';
+        document.getElementById('historyBadge').textContent = '';
+        return;
+      }
+      document.getElementById('historyBadge').textContent = res.stockIns.length + '건';
+
+      c.innerHTML = res.stockIns.map(s => {
+        const d = new Date(s.date);
+        const tt = d.toLocaleString('ko-KR', {
+          month: 'numeric', day: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        });
+        return `
+          <div class="history-item">
+            <div class="hi-row1">
+              <span class="hi-name">${escapeHtml(s.name)}</span>
+              <span class="hi-qty">+${s.quantity}</span>
+            </div>
+            <div class="hi-row2">
+              <span><span class="hi-id">${escapeHtml(s.id)}</span> · ${tt}</span>
+              <span>현재 재고 ${s.newStock}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    /* ─── QR 스캐너 ─── */
+    function startScanner() {
+      // HTTPS 체크
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        setStatus('⚠️ 카메라는 HTTPS에서만 작동합니다. 배포 URL 사용 필요', 'error');
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus('⚠️ 이 브라우저는 카메라를 지원하지 않습니다', 'error');
+        return;
+      }
+
+      scanner = new Html5Qrcode('scanReader');
+      scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
+        onQrScanned,
+        () => {}
+      ).then(() => {
+        setStatus('제품 QR을 카메라에 비추세요', '');
+      }).catch(err => {
+        let msg;
+        const name = (err && err.name) || '';
+        const errMsg = (err && err.message) || '';
+
+        if (errMsg.includes('Permissions policy') || errMsg.includes('permissions policy')) {
+          msg = '🚫 Apps Script에서 카메라 차단됨. 모바일 사용 또는 "직접 입력" 권장';
+        } else if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          msg = '🚫 카메라 권한 거부됨. 주소창 🔒 → 카메라 → 허용';
+        } else if (name === 'NotFoundError') {
+          msg = '📷 카메라 없음. 직접 입력 사용';
+        } else if (name === 'NotReadableError') {
+          msg = '📷 다른 앱이 사용 중';
+        } else {
+          msg = '⚠️ 카메라 오류: ' + (errMsg || name);
+        }
+        setStatus(msg, 'error');
+      });
+    }
+
+    function onQrScanned(text) {
+      if (!scanning) return;
+      const now = Date.now();
+      if (text === lastScan.code && now - lastScan.time < 2000) return;
+      lastScan = { code: text, time: now };
+
+      scanning = false;
+      const id = String(text).trim();
+      const p = allProducts.find(x => x.id === id);
+      if (!p) {
+        setStatus(`❌ "${id}" 제품을 찾을 수 없음`, 'error');
+        setTimeout(() => {
+          setStatus('제품 QR을 카메라에 비추세요', '');
+          scanning = true;
+        }, 1500);
+        return;
+      }
+      openQuantityModal(p);
+    }
+
+    function setStatus(msg, type) {
+      const el = document.getElementById('scanStatus');
+      el.textContent = msg;
+      el.className = 'scan-status ' + (type || '');
+    }
+
+    /* ─── 수량 입력 모달 ─── */
+    function openQuantityModal(product) {
+      currentProduct = product;
+      document.getElementById('qmName').textContent = product.name;
+      document.getElementById('qmId').textContent = product.id;
+      document.getElementById('qmCategory').textContent = product.category;
+      document.getElementById('qmPrice').textContent =
+        fmtUSD(product.price);
+      document.getElementById('qmCurrentStock').textContent = product.stock;
+      document.getElementById('qmQty').value = 1;
+      updatePreview();
+      document.getElementById('quantityModal').classList.add('active');
+      setTimeout(() => document.getElementById('qmQty').select(), 100);
+    }
+
+    function closeQuantityModal() {
+      document.getElementById('quantityModal').classList.remove('active');
+      currentProduct = null;
+      setTimeout(() => {
+        scanning = true;
+        setStatus('제품 QR을 카메라에 비추세요', '');
+      }, 200);
+    }
+
+    function adjustQty(delta) {
+      const input = document.getElementById('qmQty');
+      const newVal = Math.max(1, (Number(input.value) || 0) + delta);
+      input.value = newVal;
+      updatePreview();
+    }
+
+    function setQty(v) {
+      document.getElementById('qmQty').value = v;
+      updatePreview();
+    }
+
+    function updatePreview() {
+      if (!currentProduct) return;
+      const qty = Number(document.getElementById('qmQty').value) || 0;
+      const newStock = currentProduct.stock + qty;
+      document.getElementById('qmNewStock').textContent = newStock + '개';
+      document.getElementById('qmConfirm').disabled = qty <= 0;
+    }
+
+    function confirmStockIn() {
+      if (!currentProduct) return;
+      const qty = Number(document.getElementById('qmQty').value);
+      if (isNaN(qty) || qty <= 0) {
+        showToast('수량을 입력하세요', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('qmConfirm');
+      btn.disabled = true;
+      btn.textContent = '처리 중...';
+
+      api('recordStockIn', { productId: currentProduct.id, quantity: qty, note: '' })
+        .then(res => { (res => {
+          btn.disabled = false;
+          btn.textContent = '입고 완료 ✓';
+
+          if (!res.success) {
+            showToast(res.message, 'error');
+            return;
+          }
+          showToast(
+            `📥 ${res.product.name} +${res.product.quantityAdded} (재고 ${res.product.newStock})`,
+            'success'
+          );
+          closeQuantityModal();
+          loadProducts();
+          loadHistory();
+          loadSummary();
+        })(res); })
+        .catch(err => { (err => {
+          btn.disabled = false;
+          btn.textContent = '입고 완료 ✓';
+          showToast('오류: ' + (err.message || err), 'error');
+        })(err); });
+    }
+
+    /* ─── 직접 입력 모달 ─── */
+    function openManualEntry() {
+      document.getElementById('manualEntryModal').classList.add('active');
+      const input = document.getElementById('manualSearchInput');
+      input.value = '';
+      updateManualResults();
+      setTimeout(() => input.focus(), 100);
+      scanning = false;
+    }
+
+    function closeManualEntry() {
+      document.getElementById('manualEntryModal').classList.remove('active');
+      scanning = true;
+    }
+
+    function updateManualResults() {
+      const q = document.getElementById('manualSearchInput').value.trim().toLowerCase();
+      const results = document.getElementById('manualResults');
+
+      let filtered = allProducts;
+      if (q) {
+        filtered = allProducts.filter(p =>
+          p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
+        );
+      }
+      filtered = filtered.slice(0, 50);
+
+      if (filtered.length === 0) {
+        results.innerHTML = '<div class="manual-empty">' +
+          (q ? `"${escapeHtml(q)}" 검색 결과 없음` : '제품이 없습니다') +
+          '</div>';
+        return;
+      }
+
+      results.innerHTML = filtered.map(p => `
+        <div class="manual-result-item" onclick="selectFromManual('${escapeAttr(p.id)}')">
+          <div>
+            <div class="mri-name">${escapeHtml(p.name)}</div>
+            <div class="mri-meta">${escapeHtml(p.id)} · ${escapeHtml(p.category)} · 재고 ${p.stock}</div>
+          </div>
+          <button class="mri-action">선택</button>
+        </div>
+      `).join('');
+    }
+
+    function selectFromManual(productId) {
+      const p = allProducts.find(x => x.id === productId);
+      if (!p) return;
+      closeManualEntry();
+      openQuantityModal(p);
+    }
+
+    function onManualKeyDown(e) {
+      if (e.key === 'Enter') {
+        const q = document.getElementById('manualSearchInput').value.trim().toLowerCase();
+        if (!q) return;
+        const exact = allProducts.find(p => p.id.toLowerCase() === q);
+        if (exact) { selectFromManual(exact.id); return; }
+        const matches = allProducts.filter(p =>
+          p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
+        );
+        if (matches.length === 1) selectFromManual(matches[0].id);
+      } else if (e.key === 'Escape') {
+        closeManualEntry();
+      }
+    }
+
+    /* ─── 유틸 ─── */
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show ' + (type || '');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[m]));
+    }
+    function fmtUSD(amount) {
+      const n = Number(amount) || 0;
+      return '$' + n.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+    function escapeAttr(str) {
+      return String(str).replace(/['"\\]/g, m => '\\' + m);
+    }
+
+    document.getElementById('quantityModal').addEventListener('click', (e) => {
+      if (e.target.id === 'quantityModal') closeQuantityModal();
+    });
+    document.getElementById('manualEntryModal').addEventListener('click', (e) => {
+      if (e.target.id === 'manualEntryModal') closeManualEntry();
+    });
+  </script>
+</body>
+</html>

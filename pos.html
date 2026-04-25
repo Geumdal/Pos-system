@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>POS 재고관리</title>
+  <meta http-equiv="Permissions-Policy" content="camera=*, microphone=*">
+  <meta name="permissions-policy" content="camera=*">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      font-size: 14px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button { font-family: inherit; cursor: pointer; }
+
+    /* ─── 레이아웃 ─── */
+    .app {
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      height: 100vh;
+    }
+    header {
+      background: #1d1d1f; color: white;
+      padding: 0 16px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    header h1 { font-size: 16px; font-weight: 600; }
+    header .menu { display: flex; gap: 8px; align-items: center; }
+    .header-btn {
+      background: rgba(255,255,255,0.15); color: white;
+      padding: 7px 14px; border: none; border-radius: 16px;
+      font-size: 13px; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      height: calc(100vh - 56px);
+      overflow: hidden;
+    }
+
+    /* ─── 좌측: 상품 영역 ─── */
+    .products-pane {
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      padding: 12px;
+    }
+    /* 메인 액션 버튼 (QR 스캔 + 직접 입력) */
+    .action-buttons {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .action-btn {
+      padding: 14px 16px;
+      border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 600;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 2px; line-height: 1.2;
+      cursor: pointer; transition: transform 0.1s;
+    }
+    .action-btn:active { transform: scale(0.98); }
+    .action-btn.primary {
+      background: #007aff; color: white;
+    }
+    .action-btn.secondary {
+      background: white; color: #1d1d1f;
+      border: 1.5px solid #e5e5ea;
+    }
+    .action-btn .ab-hint {
+      font-size: 10px; font-weight: 400;
+      opacity: 0.85; letter-spacing: -0.2px;
+    }
+    .action-btn.primary .ab-hint { color: rgba(255,255,255,0.9); }
+    .action-btn.secondary .ab-hint { color: #ff9500; }
+
+    .search-row {
+      display: flex; gap: 8px; margin-bottom: 10px;
+    }
+    .search-input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #e5e5ea;
+      border-radius: 10px; font-size: 14px; font-family: inherit;
+      background: white;
+    }
+
+    /* 직접 입력 모달 */
+    .manual-search-input {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 17px;
+      border: 2px solid #e5e5ea;
+      border-radius: 12px; font-family: inherit;
+      margin-bottom: 12px;
+    }
+    .manual-search-input:focus {
+      outline: none; border-color: #007aff;
+    }
+    .manual-results {
+      max-height: 50vh; overflow-y: auto;
+      border: 1px solid #e5e5ea;
+      border-radius: 12px;
+      background: white;
+    }
+    .manual-result-item {
+      padding: 12px 14px;
+      border-bottom: 1px solid #f5f5f7;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px; align-items: center;
+      cursor: pointer; transition: background 0.1s;
+    }
+    .manual-result-item:last-child { border-bottom: none; }
+    .manual-result-item:not(.disabled):active { background: #f5f5f7; }
+    .manual-result-item.disabled { opacity: 0.45; cursor: not-allowed; }
+    .manual-result-item .mri-info { min-width: 0; }
+    .manual-result-item .mri-name {
+      font-size: 14px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .manual-result-item .mri-meta {
+      font-size: 11px; color: #8e8e93; margin-top: 2px;
+    }
+    .manual-result-item .mri-stock-low { color: #ff9500; font-weight: 600; }
+    .manual-result-item .mri-stock-out { color: #ff3b30; font-weight: 600; }
+    .manual-result-item .mri-action {
+      background: #007aff; color: white;
+      padding: 8px 14px; border: none;
+      border-radius: 8px; font-size: 13px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .manual-result-item.disabled .mri-action {
+      background: #c7c7cc;
+    }
+    .manual-empty {
+      padding: 30px 20px; text-align: center;
+      color: #8e8e93; font-size: 13px;
+    }
+    .manual-hint {
+      background: #fff8e5;
+      border: 1px solid #ffe5a3;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: #8a5a00;
+      margin-bottom: 12px;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .manual-hint::before {
+      content: 'ℹ️'; font-size: 14px; flex-shrink: 0;
+    }
+
+    .categories {
+      display: flex; gap: 6px; overflow-x: auto;
+      padding-bottom: 8px; margin-bottom: 10px;
+      flex-wrap: nowrap;
+    }
+    .categories::-webkit-scrollbar { height: 0; }
+    .cat-tab {
+      padding: 8px 16px; background: white;
+      border: 1px solid #e5e5ea; border-radius: 18px;
+      font-size: 13px; color: #1d1d1f;
+      white-space: nowrap;
+    }
+    .cat-tab.active {
+      background: #1d1d1f; color: white; border-color: #1d1d1f;
+    }
+
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      overflow-y: auto;
+      padding-bottom: 16px;
+      flex: 1;
+    }
+    .product-card {
+      background: white;
+      border: 1px solid #e5e5ea;
+      border-radius: 12px;
+      padding: 14px 10px;
+      text-align: center;
+      transition: all 0.15s;
+      position: relative;
+      min-height: 90px;
+      display: flex; flex-direction: column; justify-content: center;
+    }
+    .product-card:not(.disabled):active { transform: scale(0.97); background: #f5f5f7; }
+    .product-card.disabled { opacity: 0.4; cursor: not-allowed; }
+    .product-card .pname {
+      font-size: 14px; font-weight: 600;
+      margin-bottom: 4px; word-break: keep-all; line-height: 1.25;
+    }
+    .product-card .pprice {
+      font-size: 13px; color: #1d1d1f; font-weight: 500;
+    }
+    .product-card .pstock {
+      position: absolute; top: 6px; right: 8px;
+      font-size: 10px; color: #8e8e93;
+    }
+    .product-card .pstock.low { color: #ff9500; font-weight: 600; }
+    .product-card .pstock.empty { color: #ff3b30; font-weight: 600; }
+
+    .empty-grid {
+      grid-column: 1 / -1; text-align: center;
+      padding: 60px 20px; color: #8e8e93;
+    }
+
+    /* ─── 우측: 장바구니 ─── */
+    .cart-pane {
+      background: white;
+      border-left: 1px solid #e5e5ea;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .cart-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid #e5e5ea;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .cart-header h2 { font-size: 15px; font-weight: 600; }
+    .cart-clear {
+      background: none; border: none; color: #ff3b30;
+      font-size: 12px; padding: 4px 8px;
+    }
+    .cart-items {
+      flex: 1; overflow-y: auto;
+      padding: 8px 0;
+    }
+    .cart-item {
+      padding: 10px 16px;
+      border-bottom: 1px solid #f5f5f7;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4px 8px;
+      align-items: center;
+    }
+    .cart-item:last-child { border-bottom: none; }
+    .cart-item .ci-name {
+      font-size: 14px; font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cart-item .ci-subtotal {
+      font-size: 14px; font-weight: 600; text-align: right;
+    }
+    .cart-item .ci-controls {
+      display: flex; align-items: center; gap: 8px;
+      grid-column: 1 / -1;
+    }
+    .qty-btn {
+      width: 30px; height: 30px;
+      border-radius: 50%; border: 1px solid #e5e5ea;
+      background: white; font-size: 16px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .qty-btn:active { background: #f5f5f7; }
+    .qty-display {
+      min-width: 28px; text-align: center; font-weight: 600;
+    }
+    .ci-unit {
+      flex: 1; font-size: 12px; color: #8e8e93;
+    }
+    .ci-delete {
+      color: #ff3b30; background: none; border: none;
+      padding: 4px 8px; font-size: 13px;
+    }
+    .cart-empty {
+      padding: 40px 20px; text-align: center;
+      color: #8e8e93; font-size: 13px;
+    }
+
+    .cart-summary {
+      padding: 14px 16px;
+      background: #f5f5f7;
+      border-top: 1px solid #e5e5ea;
+    }
+    .summary-row {
+      display: flex; justify-content: space-between;
+      padding: 4px 0; font-size: 14px;
+    }
+    .summary-row.total {
+      font-size: 18px; font-weight: 700;
+      padding-top: 8px;
+      border-top: 1px solid #e5e5ea; margin-top: 4px;
+    }
+    .pay-btn {
+      width: 100%; padding: 16px;
+      background: #007aff; color: white;
+      border: none; border-radius: 12px;
+      font-size: 17px; font-weight: 600;
+      margin-top: 12px;
+    }
+    .pay-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .pay-btn:not(:disabled):active { background: #0066d6; }
+
+    /* ─── 모달 ─── */
+    .modal-bd {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    .modal-bd.active { display: flex; }
+    .modal {
+      background: white;
+      border-radius: 18px;
+      width: 90%; max-width: 460px;
+      max-height: 90vh; overflow-y: auto;
+      padding: 20px;
+    }
+    .modal h2 { font-size: 18px; margin-bottom: 16px; font-weight: 600; }
+
+    /* 결제 모달 */
+    .pay-method-row {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; margin-bottom: 16px;
+    }
+    .pay-method {
+      padding: 16px;
+      background: white;
+      border: 2px solid #e5e5ea;
+      border-radius: 12px;
+      font-size: 15px; font-weight: 600;
+      text-align: center;
+    }
+    .pay-method.active {
+      border-color: #007aff; background: rgba(0,122,255,0.05);
+      color: #007aff;
+    }
+    .pay-amount-box {
+      background: #f5f5f7;
+      border-radius: 12px; padding: 16px;
+      margin-bottom: 14px;
+    }
+    .pay-amount-row {
+      display: flex; justify-content: space-between;
+      padding: 4px 0;
+    }
+    .pay-amount-row.big {
+      font-size: 20px; font-weight: 700;
+      padding-top: 8px; border-top: 1px solid #e5e5ea; margin-top: 4px;
+    }
+    .pay-amount-row.change {
+      color: #ff3b30; font-weight: 600;
+    }
+    .tendered-input {
+      width: 100%;
+      padding: 14px;
+      font-size: 18px; font-weight: 600; text-align: right;
+      border: 1px solid #e5e5ea;
+      border-radius: 10px; font-family: inherit;
+      margin-bottom: 10px;
+    }
+    .quick-cash {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 6px; margin-bottom: 14px;
+    }
+    @media (max-width: 480px) {
+      .quick-cash { grid-template-columns: repeat(3, 1fr); }
+    }
+    .quick-cash button {
+      padding: 10px 4px; font-size: 12px;
+      background: white; border: 1px solid #e5e5ea;
+      border-radius: 8px; font-weight: 500;
+    }
+    .quick-cash button:active { background: #f5f5f7; }
+
+    .modal-actions {
+      display: grid; grid-template-columns: 1fr 2fr;
+      gap: 8px;
+    }
+    .btn-cancel, .btn-confirm {
+      padding: 14px; border: none; border-radius: 10px;
+      font-size: 15px; font-weight: 600;
+    }
+    .btn-cancel { background: #e5e5ea; color: #1d1d1f; }
+    .btn-confirm { background: #34c759; color: white; }
+    .btn-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* 영수증 */
+    .receipt {
+      font-family: "Menlo", Consolas, monospace;
+      font-size: 13px;
+      background: white;
+    }
+    .receipt-header {
+      text-align: center; padding-bottom: 10px;
+      border-bottom: 1px dashed #ccc; margin-bottom: 10px;
+    }
+    .receipt-header .store { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .receipt-header .meta { font-size: 11px; color: #666; }
+    .receipt-items { padding: 6px 0; border-bottom: 1px dashed #ccc; }
+    .receipt-item {
+      display: grid; grid-template-columns: 2fr auto auto;
+      gap: 8px; padding: 3px 0; font-size: 12px;
+    }
+    .receipt-summary { padding: 8px 0; font-size: 13px; }
+    .receipt-summary > div { display: flex; justify-content: space-between; padding: 2px 0; }
+    .receipt-summary .total {
+      font-size: 16px; font-weight: 700;
+      padding: 6px 0; border-top: 1px dashed #ccc; margin-top: 4px;
+    }
+    .receipt-footer {
+      text-align: center; padding-top: 10px; font-size: 11px;
+      color: #666; border-top: 1px dashed #ccc; margin-top: 10px;
+    }
+
+    /* 토스트 */
+    .toast {
+      position: fixed; top: 70px; left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(29,29,31,0.95); color: white;
+      padding: 12px 20px; border-radius: 24px;
+      z-index: 2000; opacity: 0;
+      transition: all 0.3s; font-size: 14px;
+      max-width: 90%; text-align: center;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.success { background: #34c759; }
+    .toast.error { background: #ff3b30; }
+
+    /* ─── 모바일 반응형 ─── */
+    @media (max-width: 768px) {
+      .app {
+        grid-template-rows: 48px 1fr;
+        height: 100vh;
+      }
+      header {
+        padding: 0 10px;
+        flex-wrap: nowrap;
+        gap: 6px;
+        overflow: hidden;
+      }
+      header h1 {
+        font-size: 14px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex-shrink: 1;
+      }
+      header .menu {
+        gap: 4px;
+        flex-shrink: 0;
+      }
+      .header-btn {
+        padding: 5px 8px;
+        font-size: 11px;
+        border-radius: 12px;
+        white-space: nowrap;
+      }
+      .main {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+        height: calc(100vh - 48px);
+      }
+      .products-pane { padding: 8px; }
+      .cart-pane {
+        border-left: none;
+        border-top: 1px solid #e5e5ea;
+        max-height: 42vh;
+      }
+      .cart-items { max-height: 22vh; }
+      .product-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+      }
+      .product-card {
+        padding: 8px;
+      }
+      .product-card .pname {
+        font-size: 12px;
+        line-height: 1.25;
+        word-break: break-word;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
+      .product-card .pprice {
+        font-size: 14px;
+      }
+      .product-card .pstock {
+        font-size: 10px;
+      }
+      /* 카테고리 바 - 가로 스크롤 */
+      .category-bar {
+        overflow-x: auto;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .category-bar::-webkit-scrollbar { display: none; }
+      .category-bar .cat-btn {
+        flex-shrink: 0;
+        font-size: 12px;
+        padding: 6px 12px;
+      }
+    }
+
+    @media (max-width: 380px) {
+      header h1 { font-size: 14px; }
+      header h1 .label { display: none; }
+      .header-btn { padding: 4px 6px; font-size: 10px; }
+      .header-btn .label { display: none; }
+      .product-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* 인쇄 */
+    @media print {
+      body { background: white; }
+      .app, .modal-bd:not(.active) { display: none !important; }
+      .modal-bd.active {
+        position: static; display: block !important;
+        background: none; padding: 0;
+        align-items: stretch; justify-content: stretch;
+      }
+      .modal {
+        box-shadow: none; max-width: 100%; width: 100%;
+        padding: 0; border-radius: 0; max-height: none;
+        overflow: visible;
+      }
+      .modal-actions { display: none !important; }
+    }
+  </style>
+<script src="config.js"></script>
+  <script src="assets/api.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>🛒<span class="label"> POS 재고관리</span></h1>
+      <div class="menu">
+        <a class="header-btn" href="stockin.html">📥<span class="label"> 입고</span></a>
+        <a class="header-btn" href="admin.html">📋<span class="label"> 제품관리</span></a>
+        <a class="header-btn" href="qr.html">🏷️<span class="label"> QR</span></a>
+        <a class="header-btn" href="stats.html">📊<span class="label"> 통계</span></a>
+      </div>
+    </header>
+
+    <div class="main">
+      <div class="products-pane">
+        <div class="action-buttons">
+          <button class="action-btn primary" onclick="openManualEntry()">
+            <span>⌨️ 직접 입력</span>
+            <span class="ab-hint">제품명/ID로 빠른 검색 (추천)</span>
+          </button>
+          <button class="action-btn secondary" onclick="openScanner()">
+            <span>📷 QR 스캔</span>
+            <span class="ab-hint">모바일 권장</span>
+          </button>
+        </div>
+
+        <div class="search-row">
+          <input type="text" class="search-input" id="searchInput"
+                 placeholder="🔍 제품명 또는 ID로 빠른 검색...">
+        </div>
+
+        <div class="categories" id="categories"></div>
+
+        <div class="product-grid" id="productGrid">
+          <div class="empty-grid">불러오는 중...</div>
+        </div>
+      </div>
+
+      <div class="cart-pane">
+        <div class="cart-header">
+          <h2>장바구니 <span id="cartCount" style="color:#8e8e93;font-size:13px;font-weight:400;"></span></h2>
+          <button class="cart-clear" onclick="clearCart()">전체삭제</button>
+        </div>
+        <div class="cart-items" id="cartItems">
+          <div class="cart-empty">제품을 선택하세요</div>
+        </div>
+        <div class="cart-summary">
+          <div class="summary-row">
+            <span>항목</span><span id="sumItems">0</span>
+          </div>
+          <div class="summary-row">
+            <span>수량</span><span id="sumQty">0</span>
+          </div>
+          <div class="summary-row total">
+            <span>총액</span><span id="sumTotal">$0.00</span>
+          </div>
+          <button class="pay-btn" id="payBtn" onclick="openPaymentModal()" disabled>결제하기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 결제 모달 -->
+  <div class="modal-bd" id="paymentModal">
+    <div class="modal">
+      <h2>💳 결제</h2>
+
+      <div class="pay-method-row">
+        <button class="pay-method active" id="payCash"
+                onclick="selectMethod('현금')">💵 현금 (Cash)</button>
+        <button class="pay-method" id="payVenmo"
+                onclick="selectMethod('Venmo')">💸 Venmo</button>
+      </div>
+
+      <div id="venmoBox" style="display:none; background:linear-gradient(135deg,#3D95CE,#2a7ab0); color:white; padding:14px 16px; border-radius:12px; margin-bottom:14px; text-align:center;">
+        <div style="font-size:11px; opacity:0.85; letter-spacing:0.5px;">VENMO로 송금</div>
+        <div style="font-size:22px; font-weight:700; margin-top:4px; letter-spacing:0.5px;">@Garden-Church</div>
+        <div style="font-size:11px; opacity:0.85; margin-top:4px;">금액 확인 후 직접 송금받으세요</div>
+      </div>
+
+      <div class="pay-amount-box">
+        <div class="pay-amount-row">
+          <span>합계</span>
+          <span id="payTotal">$0.00</span>
+        </div>
+        <div class="pay-amount-row big">
+          <span>총액</span>
+          <span id="payTotalBig">$0.00</span>
+        </div>
+      </div>
+
+      <div id="cashSection">
+        <div style="font-size:13px;color:#666;margin-bottom:6px;">받은 금액 (Tendered)</div>
+        <input type="number" class="tendered-input" id="tenderedInput"
+               placeholder="0.00" min="0" step="0.01" oninput="calcChange()">
+        <div class="quick-cash">
+          <button onclick="setExact()">정확히</button>
+          <button onclick="addCash(5)">+$5</button>
+          <button onclick="addCash(10)">+$10</button>
+          <button onclick="addCash(20)">+$20</button>
+          <button onclick="addCash(50)">+$50</button>
+          <button onclick="addCash(100)">+$100</button>
+          <button onclick="clearTendered()">지움</button>
+        </div>
+        <div class="pay-amount-box" style="margin-bottom:14px;">
+          <div class="pay-amount-row change">
+            <span>거스름돈</span>
+            <span id="changeAmount">$0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closePaymentModal()">취소</button>
+        <button class="btn-confirm" id="confirmBtn" onclick="confirmPayment()">결제 완료</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 영수증 모달 -->
+  <div class="modal-bd" id="receiptModal">
+    <div class="modal" id="receiptContent">
+    </div>
+  </div>
+
+  <!-- 직접 입력 모달 (QR 손상/분실 시) -->
+  <div class="modal-bd" id="manualEntryModal">
+    <div class="modal" style="max-width: 480px;">
+      <h2>⌨️ 직접 입력</h2>
+      <div class="manual-hint">
+        <span>QR 코드가 손상되었거나 없는 경우 사용합니다. 제품ID나 제품명 일부를 입력하면 일치하는 제품이 표시되고, 탭하면 장바구니에 추가됩니다.</span>
+      </div>
+      <input type="text" class="manual-search-input" id="manualSearchInput"
+             placeholder="제품ID 또는 제품명..." autocomplete="off"
+             oninput="updateManualResults()"
+             onkeydown="onManualKeyDown(event)">
+      <div class="manual-results" id="manualResults"></div>
+      <div class="modal-actions" style="margin-top: 14px;">
+        <button class="btn-cancel" onclick="closeManualEntry()" style="grid-column: 1 / -1;">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR 스캔 모달 -->
+  <div class="modal-bd" id="scanModal">
+    <div class="modal" style="padding: 16px;">
+      <h2>📷 QR 스캔</h2>
+      <div id="scanReader" style="width:100%; min-height:280px; background:#000; border-radius:12px; overflow:hidden;"></div>
+      <div style="margin-top:10px; font-size:13px; color:#666; text-align:center;" id="scanStatus">카메라 준비 중...</div>
+      <div style="margin-top:10px;">
+        <button onclick="closeScanner(); openManualEntry();"
+                style="width:100%; padding:12px; background:#007aff; color:white; border:none; border-radius:10px; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer;">
+          ⌨️ 직접 입력으로 전환
+        </button>
+      </div>
+      <div class="modal-actions" style="margin-top:8px;">
+        <button class="btn-cancel" onclick="closeScanner()" style="grid-column:1/-1;">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script>
+    let allProducts = [];
+    let categories = ['전체'];
+    let activeCategory = '전체';
+    let cart = [];
+    let payMethod = '현금';
+    let scanner = null;
+
+    /* ─── 초기 로드 ─── */
+    window.addEventListener('load', () => {
+      loadProducts();
+      const searchEl = document.getElementById('searchInput');
+      searchEl.addEventListener('input', renderProducts);
+
+      // Enter: 첫 매치 자동 장바구니 추가 (USB 바코드 스캐너도 자동 동작)
+      searchEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const q = searchEl.value.trim().toLowerCase();
+          if (!q) return;
+          // 정확히 일치하는 ID 우선
+          const exact = allProducts.find(p =>
+            p.active && p.stock > 0 && p.id.toLowerCase() === q
+          );
+          if (exact) {
+            addToCart(exact.id);
+            searchEl.value = '';
+            renderProducts();
+            return;
+          }
+          // 부분 매치 중 첫 번째
+          const matches = allProducts.filter(p =>
+            p.active && p.stock > 0 &&
+            (p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
+          );
+          if (matches.length === 1) {
+            addToCart(matches[0].id);
+            searchEl.value = '';
+            renderProducts();
+          }
+        } else if (e.key === 'Escape') {
+          searchEl.value = '';
+          renderProducts();
+        }
+      });
+
+      // 단축키 / 또는 F2 → 검색창 포커스
+      document.addEventListener('keydown', (e) => {
+        if ((e.key === '/' || e.key === 'F2') &&
+            document.activeElement.tagName !== 'INPUT' &&
+            !document.querySelector('.modal-bd.active')) {
+          e.preventDefault();
+          searchEl.focus();
+          searchEl.select();
+        }
+      });
+    });
+
+    function loadProducts() {
+      api('getProducts')
+        .then(res => { (onProductsLoaded)(res); })
+        .catch(err => { (err => {
+          document.getElementById('productGrid').innerHTML =
+            '<div class="empty-grid">오류: ' + (err.message || err) + '</div>';
+        })(err); });
+    }
+
+    function onProductsLoaded(res) {
+      if (!res.success) {
+        showToast(res.message, 'error');
+        return;
+      }
+      allProducts = res.products || [];
+      categories  = res.categories || ['전체'];
+      renderCategories();
+      renderProducts();
+    }
+
+    function renderCategories() {
+      const wrap = document.getElementById('categories');
+      wrap.innerHTML = categories.map(c =>
+        `<button class="cat-tab ${c === activeCategory ? 'active' : ''}"
+                 onclick="selectCategory('${c.replace(/'/g, "\\'")}')">${c}</button>`
+      ).join('');
+    }
+
+    function selectCategory(c) {
+      activeCategory = c;
+      renderCategories();
+      renderProducts();
+    }
+
+    function renderProducts() {
+      const search = document.getElementById('searchInput').value.trim().toLowerCase();
+      const grid = document.getElementById('productGrid');
+
+      const filtered = allProducts.filter(p => {
+        if (activeCategory !== '전체' && p.category !== activeCategory) return false;
+        if (search) {
+          return p.name.toLowerCase().includes(search) ||
+                 p.id.toLowerCase().includes(search);
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '<div class="empty-grid">제품이 없습니다</div>';
+        return;
+      }
+
+      grid.innerHTML = filtered.map(p => {
+        const inCart = cart.find(c => c.id === p.id);
+        const cartQty = inCart ? inCart.qty : 0;
+        const remaining = p.stock - cartQty;
+        const isOut = remaining <= 0;
+        const isLow = remaining > 0 && remaining <= p.minStock;
+        const stockClass = isOut ? 'empty' : (isLow ? 'low' : '');
+        const stockText = isOut ? '품절' : (`재고 ${remaining}`);
+
+        return `
+          <div class="product-card ${isOut ? 'disabled' : ''}"
+               onclick="${isOut ? '' : `addToCart('${p.id}')`}">
+            <div class="pstock ${stockClass}">${stockText}</div>
+            <div class="pname">${escapeHtml(p.name)}</div>
+            <div class="pprice">${fmtUSD(p.price)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    /* ─── 장바구니 ─── */
+    function addToCart(productId) {
+      const p = allProducts.find(x => x.id === productId);
+      if (!p) return;
+
+      const existing = cart.find(c => c.id === productId);
+      const currentQty = existing ? existing.qty : 0;
+
+      if (currentQty + 1 > p.stock) {
+        showToast(`${p.name} 재고 부족 (재고 ${p.stock}개)`, 'error');
+        return;
+      }
+
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        cart.push({ id: p.id, name: p.name, price: p.price, qty: 1 });
+      }
+      renderCart();
+      renderProducts();
+    }
+
+    function changeQty(productId, delta) {
+      const item = cart.find(c => c.id === productId);
+      if (!item) return;
+
+      const product = allProducts.find(x => x.id === productId);
+      const newQty = item.qty + delta;
+
+      if (newQty <= 0) {
+        removeFromCart(productId);
+        return;
+      }
+      if (newQty > product.stock) {
+        showToast(`재고 부족 (재고 ${product.stock}개)`, 'error');
+        return;
+      }
+      item.qty = newQty;
+      renderCart();
+      renderProducts();
+    }
+
+    function removeFromCart(productId) {
+      cart = cart.filter(c => c.id !== productId);
+      renderCart();
+      renderProducts();
+    }
+
+    function clearCart() {
+      if (cart.length === 0) return;
+      if (!confirm('장바구니를 모두 비우시겠습니까?')) return;
+      cart = [];
+      renderCart();
+      renderProducts();
+    }
+
+    function renderCart() {
+      const container = document.getElementById('cartItems');
+      const count     = cart.length;
+      const totalQty  = cart.reduce((s, c) => s + c.qty, 0);
+      const total     = cart.reduce((s, c) => s + c.price * c.qty, 0);
+
+      document.getElementById('cartCount').textContent = count > 0 ? `(${count})` : '';
+      document.getElementById('sumItems').textContent  = count;
+      document.getElementById('sumQty').textContent    = totalQty;
+      document.getElementById('sumTotal').textContent  = fmtUSD(total);
+      document.getElementById('payBtn').disabled       = count === 0;
+
+      if (count === 0) {
+        container.innerHTML = '<div class="cart-empty">제품을 선택하세요</div>';
+        return;
+      }
+
+      container.innerHTML = cart.map(c => `
+        <div class="cart-item">
+          <div class="ci-name">${escapeHtml(c.name)}</div>
+          <div class="ci-subtotal">${fmtUSD(c.price * c.qty)}</div>
+          <div class="ci-controls">
+            <button class="qty-btn" onclick="changeQty('${c.id}', -1)">−</button>
+            <span class="qty-display">${c.qty}</span>
+            <button class="qty-btn" onclick="changeQty('${c.id}', 1)">+</button>
+            <span class="ci-unit">@${fmtUSD(c.price)}</span>
+            <button class="ci-delete" onclick="removeFromCart('${c.id}')">삭제</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    /* ─── 결제 모달 ─── */
+    function openPaymentModal() {
+      if (cart.length === 0) return;
+      const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      document.getElementById('payTotal').textContent    = fmtUSD(total);
+      document.getElementById('payTotalBig').textContent = fmtUSD(total);
+      document.getElementById('tenderedInput').value     = '';
+      document.getElementById('venmoBox').style.display = 'none';
+      calcChange();
+      payMethod = '현금';
+      updateMethodButtons();
+      document.getElementById('paymentModal').classList.add('active');
+    }
+    function closePaymentModal() {
+      document.getElementById('paymentModal').classList.remove('active');
+    }
+    function selectMethod(m) {
+      payMethod = m;
+      updateMethodButtons();
+      // 현금/Venmo 둘 다 받은 금액 입력 가능 (Venmo는 보통 정확히 지불)
+      document.getElementById('cashSection').style.display = 'block';
+      // Venmo ID 박스는 Venmo 선택 시에만
+      document.getElementById('venmoBox').style.display = m === 'Venmo' ? 'block' : 'none';
+      // Venmo로 변경 시 자동으로 정확한 금액 채워줌
+      if (m === 'Venmo') {
+        setExact();
+      }
+      calcChange();
+    }
+    function updateMethodButtons() {
+      document.getElementById('payCash').classList.toggle('active', payMethod === '현금');
+      document.getElementById('payVenmo').classList.toggle('active', payMethod === 'Venmo');
+    }
+    function setExact() {
+      const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      document.getElementById('tenderedInput').value = total;
+      calcChange();
+    }
+    function addCash(amount) {
+      const input = document.getElementById('tenderedInput');
+      input.value = (Number(input.value) || 0) + amount;
+      calcChange();
+    }
+    function clearTendered() {
+      document.getElementById('tenderedInput').value = '';
+      calcChange();
+    }
+    function calcChange() {
+      const total    = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      const tendered = Number(document.getElementById('tenderedInput').value) || 0;
+      const change   = tendered - total;
+      const el = document.getElementById('changeAmount');
+      el.textContent = change >= 0
+        ? fmtUSD(change)
+        : `부족 ${fmtUSD(Math.abs(change))}`;
+      el.style.color = change >= 0 ? '#34c759' : '#ff3b30';
+      document.getElementById('confirmBtn').disabled = (tendered < total);
+    }
+
+    function confirmPayment() {
+      const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      const tendered = Number(document.getElementById('tenderedInput').value) || 0;
+
+      if (tendered < total) {
+        showToast('받은 금액이 부족합니다', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('confirmBtn');
+      btn.disabled = true;
+      btn.textContent = '처리 중...';
+
+      const items = cart.map(c => ({ id: c.id, qty: c.qty }));
+      api('processSale', { items: items, payment: { method: payMethod, tendered: tendered } })
+        .then(res => { (onPaymentResult)(res); })
+        .catch(err => { (err => {
+          btn.disabled = false;
+          btn.textContent = '결제 완료';
+          showToast('오류: ' + (err.message || err), 'error');
+        })(err); });
+    }
+
+    function onPaymentResult(res) {
+      const btn = document.getElementById('confirmBtn');
+      btn.disabled = false;
+      btn.textContent = '결제 완료';
+
+      if (!res.success) {
+        showToast(res.message, 'error');
+        return;
+      }
+
+      closePaymentModal();
+      showReceipt(res.receipt);
+      cart = [];
+      renderCart();
+      loadProducts();
+    }
+
+    /* ─── 영수증 ─── */
+    function showReceipt(r) {
+      const date = new Date(r.timestamp);
+      const dateStr = date.toLocaleString('ko-KR');
+      const html = `
+        <div class="receipt">
+          <div class="receipt-header">
+            <div class="store">영수증</div>
+            <div class="meta">${escapeHtml(r.saleId)}<br>${dateStr}</div>
+          </div>
+          <div class="receipt-items">
+            ${r.items.map(it => `
+              <div class="receipt-item">
+                <span>${escapeHtml(it.name)}</span>
+                <span>${it.qty}×${fmtUSD(it.price)}</span>
+                <span>${fmtUSD(it.subtotal)}</span>
+              </div>
+            `).join('')}
+          </div>
+          <div class="receipt-summary">
+            <div><span>항목수</span><span>${r.itemCount}</span></div>
+            <div><span>총수량</span><span>${r.totalQty}</span></div>
+            <div class="total"><span>총액</span><span>${fmtUSD(r.totalAmount)}</span></div>
+            <div><span>결제(${escapeHtml(r.method)})</span><span>${fmtUSD(r.tendered)}</span></div>
+            ${r.method === 'Venmo' ? `<div style="text-align:center;margin-top:6px;font-weight:600;color:#3D95CE;">Venmo: @Garden-Church</div>` : ''}
+            ${r.change > 0 ? `<div><span>거스름돈</span><span>${fmtUSD(r.change)}</span></div>` : ''}
+          </div>
+          <div class="receipt-footer">감사합니다</div>
+        </div>
+        <div class="modal-actions" style="margin-top:16px;">
+          <button class="btn-cancel" onclick="window.print()">🖨️ 인쇄</button>
+          <button class="btn-confirm" onclick="closeReceipt()">확인</button>
+        </div>
+      `;
+      document.getElementById('receiptContent').innerHTML = html;
+      document.getElementById('receiptModal').classList.add('active');
+    }
+    function closeReceipt() {
+      document.getElementById('receiptModal').classList.remove('active');
+    }
+
+    /* ─── 직접 입력 모달 (QR 손상/분실 시) ─── */
+    function openManualEntry() {
+      document.getElementById('manualEntryModal').classList.add('active');
+      const input = document.getElementById('manualSearchInput');
+      input.value = '';
+      updateManualResults();
+      setTimeout(() => input.focus(), 100);
+    }
+
+    function closeManualEntry() {
+      document.getElementById('manualEntryModal').classList.remove('active');
+    }
+
+    function updateManualResults() {
+      const q = document.getElementById('manualSearchInput').value.trim().toLowerCase();
+      const results = document.getElementById('manualResults');
+
+      let filtered = allProducts;
+      if (q) {
+        filtered = allProducts.filter(p =>
+          p.id.toLowerCase().includes(q) ||
+          p.name.toLowerCase().includes(q)
+        );
+      }
+      filtered = filtered.slice(0, 50);
+
+      if (filtered.length === 0) {
+        results.innerHTML = '<div class="manual-empty">' +
+          (q ? `"${escapeHtml(q)}"에 해당하는 제품이 없습니다` : '제품이 없습니다') +
+          '</div>';
+        return;
+      }
+
+      results.innerHTML = filtered.map(p => {
+        const inCart = cart.find(c => c.id === p.id);
+        const cartQty = inCart ? inCart.qty : 0;
+        const remaining = p.stock - cartQty;
+        const isOut = remaining <= 0;
+        const isLow = remaining > 0 && remaining <= p.minStock;
+
+        let stockText = `재고 ${remaining}개`;
+        let stockClass = '';
+        if (isOut) { stockText = '품절'; stockClass = 'mri-stock-out'; }
+        else if (isLow) { stockClass = 'mri-stock-low'; }
+
+        const inCartText = cartQty > 0 ? ` · 장바구니 ${cartQty}` : '';
+
+        return `
+          <div class="manual-result-item ${isOut ? 'disabled' : ''}"
+               ${isOut ? '' : `onclick="addFromManual('${p.id}')"`}>
+            <div class="mri-info">
+              <div class="mri-name">${escapeHtml(p.name)}</div>
+              <div class="mri-meta">
+                ${escapeHtml(p.id)} · ${fmtUSD(p.price)} ·
+                <span class="${stockClass}">${stockText}</span>${inCartText}
+              </div>
+            </div>
+            <button class="mri-action">${isOut ? '품절' : '+ 추가'}</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function addFromManual(productId) {
+      const p = allProducts.find(x => x.id === productId);
+      if (!p) return;
+
+      const existing = cart.find(c => c.id === productId);
+      const currentQty = existing ? existing.qty : 0;
+      if (currentQty + 1 > p.stock) {
+        showToast(`${p.name} 재고 부족`, 'error');
+        return;
+      }
+
+      addToCart(productId);
+      showToast(`✅ ${p.name} 추가됨`, 'success');
+      updateManualResults();
+    }
+
+    function onManualKeyDown(e) {
+      if (e.key === 'Enter') {
+        const q = document.getElementById('manualSearchInput').value.trim().toLowerCase();
+        if (!q) return;
+        const exactId = allProducts.find(p => p.id.toLowerCase() === q);
+        if (exactId) {
+          addFromManual(exactId.id);
+          document.getElementById('manualSearchInput').value = '';
+          updateManualResults();
+          return;
+        }
+        const matches = allProducts.filter(p =>
+          p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
+        );
+        if (matches.length === 1) {
+          addFromManual(matches[0].id);
+          document.getElementById('manualSearchInput').value = '';
+          updateManualResults();
+        }
+      } else if (e.key === 'Escape') {
+        closeManualEntry();
+      }
+    }
+
+    /* ─── QR 스캐너 ─── */
+    let scanRetryCount = 0;
+    const SCAN_MAX_RETRY = 2;
+
+    async function openScanner() {
+      document.getElementById('scanModal').classList.add('active');
+      const statusEl = document.getElementById('scanStatus');
+      statusEl.textContent = '카메라 권한 확인 중...';
+      statusEl.className = 'scan-status';
+      statusEl.style.whiteSpace = 'pre-line';
+      scanRetryCount = 0;
+
+      // HTTPS 체크
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        statusEl.textContent = '⚠️ 카메라는 HTTPS에서만 작동합니다.';
+        statusEl.className = 'scan-status error';
+        return;
+      }
+
+      // getUserMedia 지원 체크
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        statusEl.textContent = '⚠️ 이 브라우저는 카메라를 지원하지 않습니다.\n직접 입력을 사용하세요.';
+        statusEl.className = 'scan-status error';
+        return;
+      }
+
+      // 권한을 먼저 명시적으로 요청 (모바일에서 stable)
+      try {
+        statusEl.textContent = '카메라 권한 요청 중...';
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        // 권한 받았으면 즉시 stream 정리 (Html5Qrcode가 자체 stream 만들도록)
+        stream.getTracks().forEach(t => t.stop());
+
+        // 약간 대기 (안드로이드 Chrome stability)
+        await new Promise(r => setTimeout(r, 300));
+
+        statusEl.textContent = '카메라 시작 중...';
+        await startScannerWithRetry();
+      } catch (err) {
+        showCameraError(err);
+      }
+    }
+
+    async function startScannerWithRetry() {
+      const statusEl = document.getElementById('scanStatus');
+      try {
+        if (scanner) { try { await scanner.stop(); } catch(e) {} scanner = null; }
+
+        scanner = new Html5Qrcode('scanReader');
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          onQrScanned,
+          () => {}
+        );
+        statusEl.textContent = '제품 QR을 비추세요';
+        statusEl.className = 'scan-status';
+        scanRetryCount = 0;
+      } catch (err) {
+        // 첫 실패 시 재시도 (안드로이드 Chrome bug 우회)
+        if (scanRetryCount < SCAN_MAX_RETRY) {
+          scanRetryCount++;
+          statusEl.textContent = `재시도 중... (${scanRetryCount}/${SCAN_MAX_RETRY})`;
+          await new Promise(r => setTimeout(r, 500));
+          return startScannerWithRetry();
+        }
+        showCameraError(err);
+      }
+    }
+
+    function showCameraError(err) {
+      const statusEl = document.getElementById('scanStatus');
+      let msg;
+      const name = (err && err.name) || '';
+      const errMsg = (err && err.message) || '';
+
+      if (errMsg.includes('Permissions policy') || errMsg.includes('permissions policy')) {
+        msg = '🚫 Apps Script iframe에서 카메라 차단됨\n\n📱 이 URL을 새 탭에서 열어보세요\n또는 ⌨️ "직접 입력" 사용';
+      } else if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        msg = '🚫 카메라 권한 거부됨\n\n주소창의 🔒 → 권한 → 카메라 → 허용';
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        msg = '📷 카메라를 찾을 수 없습니다\n직접 입력을 사용하세요';
+      } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+        msg = '📷 다른 앱이 카메라 사용 중\n해당 앱을 종료 후 재시도';
+      } else if (name === 'OverconstrainedError') {
+        msg = '📷 후면 카메라가 없습니다';
+      } else if (name === 'AbortError') {
+        msg = '📷 카메라 시작 중단됨\n페이지 새로고침 후 재시도';
+      } else {
+        msg = '⚠️ ' + (errMsg || name || '알 수 없는 오류') +
+              '\n\n💡 시도해볼 것:\n' +
+              '1. 페이지 새로고침 (당겨서 새로고침)\n' +
+              '2. 다른 앱이 카메라 사용 중인지 확인\n' +
+              '3. 직접 입력 사용';
+      }
+      statusEl.textContent = msg;
+      statusEl.className = 'scan-status error';
+    }
+
+    function closeScanner() {
+      if (scanner) { try { scanner.stop(); } catch(e) {} scanner = null; }
+      document.getElementById('scanModal').classList.remove('active');
+    }
+    function onQrScanned(text) {
+      const id = String(text).trim();
+      const p = allProducts.find(x => x.id === id);
+      if (!p) {
+        document.getElementById('scanStatus').textContent = `❌ "${id}" 제품 없음`;
+        setTimeout(() => {
+          document.getElementById('scanStatus').textContent = '제품 QR을 비추세요';
+        }, 1500);
+        return;
+      }
+      addToCart(p.id);
+      document.getElementById('scanStatus').textContent = `✅ ${p.name} 추가됨`;
+      setTimeout(() => {
+        document.getElementById('scanStatus').textContent = '계속 스캔하거나 닫기를 누르세요';
+      }, 1200);
+    }
+
+    /* ─── 유틸 ─── */
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[m]));
+    }
+    function fmtUSD(amount) {
+      const n = Number(amount) || 0;
+      return '$' + n.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show ' + (type || '');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+  </script>
+</body>
+</html>
