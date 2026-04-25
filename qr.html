@@ -376,9 +376,93 @@
     let allProducts = [];
     let categories = [];
 
+    // QR 라이브러리 어댑터 - node-qrcode와 davidshimjs/qrcodejs 둘 다 지원
+    // 어떤 라이브러리가 로드되었는지 자동 감지
+    function detectQRLibrary() {
+      if (typeof QRCode === 'undefined') return null;
+      // node-qrcode 라이브러리는 QRCode.toCanvas 메서드를 가짐
+      if (typeof QRCode.toCanvas === 'function') return 'node-qrcode';
+      // davidshimjs 라이브러리는 new QRCode(element)로 사용
+      if (typeof QRCode === 'function') return 'davidshim';
+      return null;
+    }
+
+    // 통합 API: 어떤 라이브러리든 동일하게 사용
+    function drawQRToCanvas(canvas, text, options) {
+      const lib = detectQRLibrary();
+      if (!lib) throw new Error('QR 라이브러리가 로드되지 않음');
+
+      if (lib === 'node-qrcode') {
+        return new Promise((resolve, reject) => {
+          QRCode.toCanvas(canvas, text, {
+            width: options.width || 100,
+            margin: options.margin || 1,
+            errorCorrectionLevel: options.errorCorrectionLevel || 'M'
+          }, err => err ? reject(err) : resolve());
+        });
+      } else {
+        // davidshimjs: 임시 div에 그린 후 canvas로 옮김
+        return new Promise((resolve) => {
+          const tempDiv = document.createElement('div');
+          tempDiv.style.display = 'none';
+          document.body.appendChild(tempDiv);
+
+          const errLevels = { 'L': QRCode.CorrectLevel.L, 'M': QRCode.CorrectLevel.M,
+                              'Q': QRCode.CorrectLevel.Q, 'H': QRCode.CorrectLevel.H };
+          new QRCode(tempDiv, {
+            text: text,
+            width: options.width || 100,
+            height: options.width || 100,
+            correctLevel: errLevels[options.errorCorrectionLevel] || QRCode.CorrectLevel.M
+          });
+
+          // davidshimjs는 canvas와 img를 둘 다 만듦. canvas를 우리 canvas로 복사
+          setTimeout(() => {
+            const generatedCanvas = tempDiv.querySelector('canvas');
+            if (generatedCanvas) {
+              canvas.width = generatedCanvas.width;
+              canvas.height = generatedCanvas.height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(generatedCanvas, 0, 0);
+            } else {
+              // canvas 없으면 img를 사용
+              const img = tempDiv.querySelector('img');
+              if (img) {
+                canvas.width = options.width || 100;
+                canvas.height = options.width || 100;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              }
+            }
+            document.body.removeChild(tempDiv);
+            resolve();
+          }, 50);
+        });
+      }
+    }
+
+    // 통합 API: dataURL로 변환
+    function getQRDataURL(text, options) {
+      const lib = detectQRLibrary();
+      if (!lib) return Promise.reject(new Error('QR 라이브러리가 로드되지 않음'));
+
+      if (lib === 'node-qrcode') {
+        return new Promise((resolve, reject) => {
+          QRCode.toDataURL(text, {
+            width: options.width || 400,
+            margin: options.margin || 2,
+            errorCorrectionLevel: options.errorCorrectionLevel || 'M'
+          }, (err, url) => err ? reject(err) : resolve(url));
+        });
+      } else {
+        // davidshimjs: canvas에 그린 후 dataURL로 변환
+        const tempCanvas = document.createElement('canvas');
+        return drawQRToCanvas(tempCanvas, text, options).then(() => tempCanvas.toDataURL('image/png'));
+      }
+    }
+
     // QR 라이브러리 로딩 대기 헬퍼
     async function waitForQRCode(maxRetries = 50) {
-      // 1단계: LIBS_LOADED Promise를 우선 기다림 (정상 시 바로 통과)
       if (window.LIBS_LOADED) {
         try {
           await Promise.race([
@@ -388,14 +472,15 @@
             )
           ]);
         } catch (e) {
-          // LIBS_LOADED가 실패해도 polling으로 한 번 더 확인
+          // polling으로 다시 시도
         }
       }
-      // 2단계: 안전을 위한 polling
       return new Promise((resolve, reject) => {
         let retries = 0;
         const check = () => {
-          if (typeof QRCode !== 'undefined') {
+          if (detectQRLibrary()) {
+            const lib = detectQRLibrary();
+            console.log(`✅ QR 라이브러리 감지: ${lib}`);
             resolve();
           } else if (retries++ >= maxRetries) {
             reject(new Error('QR 라이브러리 로딩 타임아웃'));
@@ -498,12 +583,13 @@
     function renderQRs() {
       const grid         = document.getElementById('grid');
 
-      // QR 라이브러리 로딩 체크
-      if (typeof QRCode === 'undefined') {
+      // renderQRs 내부에서 라이브러리 체크
+      const lib = detectQRLibrary();
+      if (!lib) {
         grid.innerHTML = `
           <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #ff3b30; background: #ffe5e1; border-radius: 12px;">
             ⚠️ QR 라이브러리 로딩 실패<br>
-            <span style="font-size: 13px; color: #666;">네트워크를 확인하고 페이지를 새로고침하세요 (Ctrl+R)</span>
+            <span style="font-size: 13px; color: #666;">페이지를 새로고침하세요 (Ctrl+R)</span>
           </div>`;
         return;
       }
@@ -594,11 +680,11 @@
 
         grid.appendChild(card);
 
-        QRCode.toCanvas(canvas, p.id, {
+        drawQRToCanvas(canvas, p.id, {
           width: qrSize,
           margin: 1,
           errorCorrectionLevel: errLevel
-        }, err => { if (err) console.error(err); });
+        }).catch(err => console.error('QR 그리기 실패:', err));
       });
 
       const filterCount = filtered.length;
@@ -610,18 +696,19 @@
     }
 
     function downloadSingle(product, errLevel) {
-      QRCode.toDataURL(product.id, {
+      getQRDataURL(product.id, {
         width: 400,
         margin: 2,
         errorCorrectionLevel: errLevel
-      }, (err, dataUrl) => {
-        if (err) { showToast('생성 실패: ' + err.message, 'error'); return; }
+      }).then(dataUrl => {
         const a = document.createElement('a');
         a.href = dataUrl;
         const safeName = String(product.name).replace(/[\\/:*?"<>|]/g, '_');
         a.download = `qr_${product.id}_${safeName}.png`;
         a.click();
         showToast(`${product.name} 다운로드`, 'success');
+      }).catch(err => {
+        showToast('생성 실패: ' + err.message, 'error');
       });
     }
 
@@ -650,10 +737,8 @@
 
       try {
         for (const p of filtered) {
-          const dataUrl = await new Promise((resolve, reject) => {
-            QRCode.toDataURL(p.id, {
-              width: 400, margin: 2, errorCorrectionLevel: errLevel
-            }, (err, url) => err ? reject(err) : resolve(url));
+          const dataUrl = await getQRDataURL(p.id, {
+            width: 400, margin: 2, errorCorrectionLevel: errLevel
           });
           const base64 = dataUrl.split(',')[1];
           const safeName = String(p.name).replace(/[\\/:*?"<>|]/g, '_');
