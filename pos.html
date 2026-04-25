@@ -683,7 +683,7 @@
   <div class="modal-bd" id="scanModal">
     <div class="modal" style="padding: 16px;">
       <h2>📷 QR 스캔</h2>
-      <div id="scanReader" style="width:100%; min-height:280px; background:#000; border-radius:12px; overflow:hidden;"></div>
+      <div id="scanReader" style="width:100%; min-height:380px; background:#000; border-radius:12px; overflow:hidden;"></div>
       <div style="margin-top:10px; font-size:13px; color:#666; text-align:center;" id="scanStatus">카메라 준비 중...</div>
       <div style="margin-top:10px;">
         <button onclick="closeScanner(); openManualEntry();"
@@ -1291,13 +1291,26 @@
         if (scanner) { try { await scanner.stop(); } catch(e) {} scanner = null; }
 
         scanner = new Html5Qrcode('scanReader');
+
+        // qrbox를 화면 크기에 맞춰 동적으로 (작은 화면에서도 적절히)
+        const qrboxSize = function(viewfinderWidth, viewfinderHeight) {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          const size = Math.floor(minEdge * 0.75);  // 화면의 75%
+          return { width: size, height: size };
+        };
+
         await scanner.start(
           { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 220, height: 220 } },
+          {
+            fps: 15,                  // 초당 15회 스캔 (더 빠른 인식)
+            qrbox: qrboxSize,         // 동적 크기 (화면의 75%)
+            aspectRatio: 1.0,         // 정사각형 비율
+            disableFlip: false        // 좌우 반전 QR도 인식
+          },
           onQrScanned,
-          () => {}
+          () => {}  // 무시 (계속 시도)
         );
-        statusEl.textContent = '제품 QR을 비추세요';
+        statusEl.textContent = '제품 QR을 비추세요 (15-20cm 거리)';
         statusEl.className = 'scan-status';
         scanRetryCount = 0;
       } catch (err) {
@@ -1344,27 +1357,31 @@
     function closeScanner() {
       if (scanner) { try { scanner.stop(); } catch(e) {} scanner = null; }
       document.getElementById('scanModal').classList.remove('active');
+      scanLocked = false;  // 잠금 해제 (다음 번 스캔 가능하게)
     }
 
     // QR 스캔 후 자동 추가 대신 확인 모달 표시
     let currentScannedProduct = null;  // 현재 스캔된 제품 보관
+    let scanLocked = false;            // 모달 떠있는 동안 추가 스캔 무시
 
     function onQrScanned(text) {
+      // 확인 모달이 떠 있으면 추가 스캔 무시
+      if (scanLocked) return;
+
       const id = String(text).trim();
       const p = allProducts.find(x => x.id === id);
       if (!p) {
         document.getElementById('scanStatus').textContent = `❌ "${id}" 제품 없음`;
         setTimeout(() => {
-          document.getElementById('scanStatus').textContent = '제품 QR을 비추세요';
+          if (!scanLocked) {
+            document.getElementById('scanStatus').textContent = '제품 QR을 비추세요';
+          }
         }, 1500);
         return;
       }
 
-      // 스캐너 일시 정지 (중복 인식 방지)
-      if (scanner) {
-        try { scanner.pause(true); } catch(e) {}
-      }
-
+      // 스캔 잠금 (모달 떠있는 동안 중복 인식 방지)
+      scanLocked = true;
       currentScannedProduct = p;
 
       // 확인 모달에 제품 정보 채우기
@@ -1376,6 +1393,7 @@
 
       // 확인 모달 표시
       document.getElementById('scanConfirmModal').classList.add('active');
+      document.getElementById('scanStatus').textContent = '⏸ 동작을 선택하세요';
     }
 
     // 판매 선택 → 장바구니 추가 + 모달 닫고 스캐너도 닫음
@@ -1389,6 +1407,7 @@
       document.getElementById('scanConfirmModal').classList.remove('active');
       closeScanner();
       currentScannedProduct = null;
+      scanLocked = false;
     }
 
     // 입고 선택 → 입고 수량 입력 모달로 전환
@@ -1405,6 +1424,7 @@
       document.getElementById('stockInQty').value = 1;
       document.getElementById('stockInNote').value = '';
       document.getElementById('stockInModal').classList.add('active');
+      // scanLocked는 입고 모달 처리 후 해제됨
     }
 
     // 취소 → 모든 모달 닫고 스캐너도 닫음
@@ -1412,18 +1432,14 @@
       document.getElementById('scanConfirmModal').classList.remove('active');
       closeScanner();
       currentScannedProduct = null;
+      scanLocked = false;
     }
 
-    // 다시 스캔 → 확인 모달 닫고 스캐너 재개
+    // 다시 스캔 → 확인 모달만 닫고 카메라 계속
     function continueScanning() {
       document.getElementById('scanConfirmModal').classList.remove('active');
       currentScannedProduct = null;
-      if (scanner) {
-        try { scanner.resume(); } catch(e) {
-          // resume 실패 시 스캐너 다시 시작
-          console.warn('스캐너 재개 실패:', e);
-        }
-      }
+      scanLocked = false;  // 잠금 해제하면 다시 스캔 가능
       document.getElementById('scanStatus').textContent = '제품 QR을 비추세요';
     }
 
@@ -1441,6 +1457,7 @@
     function closeStockInModal() {
       document.getElementById('stockInModal').classList.remove('active');
       currentScannedProduct = null;
+      scanLocked = false;
       closeScanner();
     }
 
