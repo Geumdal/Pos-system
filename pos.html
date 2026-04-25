@@ -436,6 +436,7 @@
       .app {
         grid-template-rows: 48px 1fr;
         height: 100vh;
+        height: 100dvh;  /* 모바일 동적 뷰포트 */
       }
       header {
         padding: 0 10px;
@@ -462,16 +463,59 @@
       }
       .main {
         grid-template-columns: 1fr;
-        grid-template-rows: 1fr auto;
+        grid-template-rows: minmax(0, 1fr) auto;
         height: calc(100vh - 48px);
+        height: calc(100dvh - 48px);
+        overflow: hidden;
       }
-      .products-pane { padding: 8px; }
+      .products-pane {
+        padding: 8px;
+        min-height: 0;  /* flex 자식이 부모 높이 초과하지 않게 */
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      /* 장바구니: 항상 하단 고정. 항목 영역은 스크롤되고 결제 버튼은 안 가려짐 */
       .cart-pane {
         border-left: none;
         border-top: 1px solid #e5e5ea;
-        max-height: 42vh;
+        max-height: 50vh;
+        max-height: 50dvh;
+        display: flex;
+        flex-direction: column;
+        background: white;
       }
-      .cart-items { max-height: 22vh; }
+      .cart-header {
+        flex-shrink: 0;  /* 헤더 안 줄어듦 */
+        padding: 10px 14px;
+      }
+      .cart-header h2 { font-size: 14px; }
+      .cart-items {
+        flex: 1 1 auto;
+        min-height: 60px;        /* 최소 높이 보장 */
+        max-height: calc(50dvh - 180px);  /* 헤더+요약+결제 버튼 공간 확보 */
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .cart-item {
+        padding: 8px 14px;       /* 모바일 패딩 줄임 */
+      }
+      .cart-item .ci-name {
+        font-size: 13px;
+      }
+      .cart-item .ci-subtotal {
+        font-size: 13px;
+      }
+      .cart-summary {
+        flex-shrink: 0;  /* 요약 영역 안 줄어듦 */
+        padding: 10px 14px;
+      }
+      .summary-row { font-size: 13px; padding: 2px 0; }
+      .summary-row.total { font-size: 16px; }
+      .checkout-btn {
+        padding: 13px;
+        font-size: 15px;
+      }
       .product-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 6px;
@@ -515,6 +559,13 @@
       .header-btn { padding: 4px 6px; font-size: 10px; }
       .header-btn .label { display: none; }
       .product-grid { grid-template-columns: repeat(2, 1fr); }
+      .cart-pane {
+        max-height: 48vh;
+        max-height: 48dvh;
+      }
+      .cart-items {
+        max-height: calc(48dvh - 170px);
+      }
     }
 
     /* 인쇄 */
