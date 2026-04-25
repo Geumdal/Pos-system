@@ -12,4 +12,4 @@
  *   window.API_URL = 'https://script.google.com/macros/s/AKfyc.../exec';
  * ============================================================ */
 
-window.API_URL = 'https://script.google.com/macros/s/AKfycbymXLykidiDOJpcl98wqyg15_SJToJEPghPBcFRWvRfVCd05sGl71ODwNNAPFDxcBjaPg/exec';
+window.API_URL = 'https://script.google.com/macros/s/AKfycbyGnY-W8NxfK7YclXG6XQ6LXbPCtshm64ZXc6KXmx53FRBgx7_vBc-tjVWxoTp2doVYgA/exec';
