@@ -697,6 +697,86 @@
     </div>
   </div>
 
+  <!-- 스캔 결과 확인 모달 -->
+  <div class="modal-bd" id="scanConfirmModal">
+    <div class="modal" style="padding: 20px; max-width: 400px;">
+      <div style="text-align: center; margin-bottom: 18px;">
+        <div style="font-size: 40px; line-height: 1; margin-bottom: 8px;">📦</div>
+        <div id="scanConfirmName" style="font-size: 18px; font-weight: 700; margin-bottom: 4px;">제품명</div>
+        <div id="scanConfirmInfo" style="font-size: 13px; color: #8e8e93;">P001 · 음료 · $4.50</div>
+        <div id="scanConfirmStock" style="margin-top: 8px; font-size: 12px; color: #8e8e93;">현재 재고: 0</div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+        <button onclick="confirmAsSale()"
+                style="padding: 14px 8px; background: #34c759; color: white; border: none; border-radius: 12px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;">
+          💰<br>판매
+        </button>
+        <button onclick="confirmAsStockIn()"
+                style="padding: 14px 8px; background: #007aff; color: white; border: none; border-radius: 12px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;">
+          📥<br>입고
+        </button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <button onclick="cancelScanConfirm()"
+                style="padding: 10px; background: #f5f5f7; color: #1d1d1f; border: none; border-radius: 10px; font-size: 13px; font-family: inherit; cursor: pointer;">
+          취소
+        </button>
+        <button onclick="continueScanning()"
+                style="padding: 10px; background: #1d1d1f; color: white; border: none; border-radius: 10px; font-size: 13px; font-family: inherit; cursor: pointer;">
+          📷 다시 스캔
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 입고 수량 입력 모달 -->
+  <div class="modal-bd" id="stockInModal">
+    <div class="modal" style="padding: 20px; max-width: 380px;">
+      <h2 style="margin-bottom: 14px;">📥 입고 처리</h2>
+      <div style="background: #f5f5f7; padding: 12px 14px; border-radius: 10px; margin-bottom: 14px;">
+        <div id="stockInProductName" style="font-size: 15px; font-weight: 600;">제품명</div>
+        <div id="stockInCurrentStock" style="font-size: 12px; color: #8e8e93; margin-top: 4px;">현재 재고: 0</div>
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 6px;">입고 수량</label>
+        <div style="display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center;">
+          <button onclick="adjustStockQty(-1)"
+                  style="width: 40px; height: 40px; background: #f5f5f7; border: none; border-radius: 8px; font-size: 18px; cursor: pointer;">−</button>
+          <input type="number" id="stockInQty" value="1" min="1"
+                 style="padding: 10px; border: 1px solid #e5e5ea; border-radius: 8px; font-size: 16px; font-weight: 700; text-align: center; font-family: inherit;">
+          <button onclick="adjustStockQty(1)"
+                  style="width: 40px; height: 40px; background: #f5f5f7; border: none; border-radius: 8px; font-size: 18px; cursor: pointer;">+</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px;">
+          <button onclick="setStockQty(1)" style="padding: 6px; background: white; border: 1px solid #e5e5ea; border-radius: 6px; font-size: 11px; cursor: pointer;">1</button>
+          <button onclick="setStockQty(5)" style="padding: 6px; background: white; border: 1px solid #e5e5ea; border-radius: 6px; font-size: 11px; cursor: pointer;">5</button>
+          <button onclick="setStockQty(10)" style="padding: 6px; background: white; border: 1px solid #e5e5ea; border-radius: 6px; font-size: 11px; cursor: pointer;">10</button>
+          <button onclick="setStockQty(50)" style="padding: 6px; background: white; border: 1px solid #e5e5ea; border-radius: 6px; font-size: 11px; cursor: pointer;">50</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 6px;">메모 (선택)</label>
+        <input type="text" id="stockInNote" placeholder="예: 추가 입고분"
+               style="width: 100%; padding: 10px 12px; border: 1px solid #e5e5ea; border-radius: 8px; font-size: 13px; font-family: inherit;">
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px;">
+        <button onclick="closeStockInModal()"
+                style="padding: 12px; background: #e5e5ea; color: #1d1d1f; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;">
+          취소
+        </button>
+        <button onclick="submitStockIn()" id="stockInBtn"
+                style="padding: 12px; background: #007aff; color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;">
+          📥 입고 등록
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -1265,6 +1345,10 @@
       if (scanner) { try { scanner.stop(); } catch(e) {} scanner = null; }
       document.getElementById('scanModal').classList.remove('active');
     }
+
+    // QR 스캔 후 자동 추가 대신 확인 모달 표시
+    let currentScannedProduct = null;  // 현재 스캔된 제품 보관
+
     function onQrScanned(text) {
       const id = String(text).trim();
       const p = allProducts.find(x => x.id === id);
@@ -1275,12 +1359,132 @@
         }, 1500);
         return;
       }
-      addToCart(p.id);
-      document.getElementById('scanStatus').textContent = `✅ ${p.name} 추가됨`;
-      setTimeout(() => {
-        document.getElementById('scanStatus').textContent = '계속 스캔하거나 닫기를 누르세요';
-      }, 1200);
+
+      // 스캐너 일시 정지 (중복 인식 방지)
+      if (scanner) {
+        try { scanner.pause(true); } catch(e) {}
+      }
+
+      currentScannedProduct = p;
+
+      // 확인 모달에 제품 정보 채우기
+      document.getElementById('scanConfirmName').textContent = p.name;
+      document.getElementById('scanConfirmInfo').textContent =
+        `${p.id} · ${p.category || '카테고리 없음'} · ${fmtUSD(p.price)}`;
+      document.getElementById('scanConfirmStock').textContent =
+        `현재 재고: ${p.stock != null ? p.stock : '-'}`;
+
+      // 확인 모달 표시
+      document.getElementById('scanConfirmModal').classList.add('active');
     }
+
+    // 판매 선택 → 장바구니 추가 + 모달 닫고 스캐너도 닫음
+    function confirmAsSale() {
+      if (!currentScannedProduct) return;
+      const p = currentScannedProduct;
+      addToCart(p.id);
+      showToast(`✅ ${p.name} 장바구니 추가`, 'success');
+
+      // 모든 스캔 관련 모달 닫기
+      document.getElementById('scanConfirmModal').classList.remove('active');
+      closeScanner();
+      currentScannedProduct = null;
+    }
+
+    // 입고 선택 → 입고 수량 입력 모달로 전환
+    function confirmAsStockIn() {
+      if (!currentScannedProduct) return;
+      const p = currentScannedProduct;
+
+      // 확인 모달 닫고 입고 모달 열기
+      document.getElementById('scanConfirmModal').classList.remove('active');
+
+      document.getElementById('stockInProductName').textContent = p.name;
+      document.getElementById('stockInCurrentStock').textContent =
+        `현재 재고: ${p.stock != null ? p.stock : '-'}`;
+      document.getElementById('stockInQty').value = 1;
+      document.getElementById('stockInNote').value = '';
+      document.getElementById('stockInModal').classList.add('active');
+    }
+
+    // 취소 → 모든 모달 닫고 스캐너도 닫음
+    function cancelScanConfirm() {
+      document.getElementById('scanConfirmModal').classList.remove('active');
+      closeScanner();
+      currentScannedProduct = null;
+    }
+
+    // 다시 스캔 → 확인 모달 닫고 스캐너 재개
+    function continueScanning() {
+      document.getElementById('scanConfirmModal').classList.remove('active');
+      currentScannedProduct = null;
+      if (scanner) {
+        try { scanner.resume(); } catch(e) {
+          // resume 실패 시 스캐너 다시 시작
+          console.warn('스캐너 재개 실패:', e);
+        }
+      }
+      document.getElementById('scanStatus').textContent = '제품 QR을 비추세요';
+    }
+
+    /* ─── 입고 수량 입력 ─── */
+    function adjustStockQty(delta) {
+      const input = document.getElementById('stockInQty');
+      const cur = parseInt(input.value, 10) || 1;
+      input.value = Math.max(1, cur + delta);
+    }
+
+    function setStockQty(n) {
+      document.getElementById('stockInQty').value = n;
+    }
+
+    function closeStockInModal() {
+      document.getElementById('stockInModal').classList.remove('active');
+      currentScannedProduct = null;
+      closeScanner();
+    }
+
+    async function submitStockIn() {
+      if (!currentScannedProduct) return;
+      const p = currentScannedProduct;
+      const qty = parseInt(document.getElementById('stockInQty').value, 10);
+      const note = document.getElementById('stockInNote').value.trim();
+
+      if (!qty || qty < 1) {
+        showToast('수량을 1 이상 입력하세요', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('stockInBtn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '⏳ 처리 중...';
+
+      try {
+        const res = await api('recordStockIn', {
+          productId: p.id,
+          quantity: qty,
+          note: note
+        });
+
+        if (res.success) {
+          showToast(`✅ ${p.name} ${qty}개 입고 완료`, 'success');
+          // 로컬 재고 업데이트
+          const prod = allProducts.find(x => x.id === p.id);
+          if (prod) prod.stock = (prod.stock || 0) + qty;
+          renderProducts();
+          closeStockInModal();
+        } else {
+          showToast('입고 실패: ' + (res.message || ''), 'error');
+        }
+      } catch (err) {
+        showToast('네트워크 오류: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
+
 
     /* ─── 유틸 ─── */
     function escapeHtml(str) {
