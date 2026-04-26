@@ -294,7 +294,9 @@
       body { background: white; padding: 0; }
       header, .panel, .info-row, .toast { display: none !important; }
       .qr-card { border: 1px dashed #ccc; break-inside: avoid; }
+      .qr-card.page-break { page-break-after: always; break-after: page; }
       .qr-grid { gap: 0 !important; max-width: none !important; }
+      .download-btn { display: none !important; }  /* 인쇄 시 다운로드 버튼 숨김 */
       @page { margin: 8mm; }
     }
   </style>
@@ -326,13 +328,8 @@
           <label>스티커 용지 규격</label>
           <select id="presetSelect" onchange="applyPreset()">
             <option value="custom">사용자 지정</option>
-            <optgroup label="A4 (한국 폼텍)">
-              <option value="formtec-3107">폼텍 LS-3107 (44칸, 25×40mm)</option>
-              <option value="formtec-3104" selected>폼텍 LS-3104 (24칸, 35×70mm)</option>
-              <option value="formtec-3110">폼텍 LS-3110 (10칸, 50×100mm)</option>
-            </optgroup>
             <optgroup label="Letter (미국 Avery)">
-              <option value="avery-22806">Avery 22806 정사각 (12칸, 2&quot;×2&quot;)</option>
+              <option value="avery-22806" selected>Avery 22806 정사각 (12칸, 2&quot;×2&quot;)</option>
               <option value="avery-22816">Avery 22816 정사각 (9칸, 2.5&quot;×2.5&quot;)</option>
               <option value="avery-5160">Avery 5160 (30칸, 1&quot;×2.625&quot;)</option>
               <option value="avery-5163">Avery 5163 배송 (10칸, 2&quot;×4&quot;)</option>
@@ -399,16 +396,13 @@
 
   <script>
     const PRESETS = {
-      // ─── A4 (한국 폼텍) ───
-      'formtec-3107': { cols: 4,  cellW: 47.5,  cellH: 25,    qrSize: 70,  paddingMm: 1.5, paper: 'A4' },
-      'formtec-3104': { cols: 3,  cellW: 70,    cellH: 35,    qrSize: 90,  paddingMm: 2,   paper: 'A4' },
-      'formtec-3110': { cols: 2,  cellW: 100,   cellH: 50,    qrSize: 130, paddingMm: 3,   paper: 'A4' },
       // ─── Letter (미국 Avery) — 1" = 25.4mm ───
-      'avery-22806':  { cols: 3,  cellW: 50.8,  cellH: 50.8,  qrSize: 130, paddingMm: 2,   paper: 'letter' },
-      'avery-22816':  { cols: 3,  cellW: 63.5,  cellH: 63.5,  qrSize: 160, paddingMm: 3,   paper: 'letter' },
-      'avery-5160':   { cols: 3,  cellW: 66.7,  cellH: 25.4,  qrSize: 70,  paddingMm: 1.5, paper: 'letter' },
-      'avery-5163':   { cols: 2,  cellW: 101.6, cellH: 50.8,  qrSize: 130, paddingMm: 2,   paper: 'letter' },
-      // ─── 자유 배치 ───
+      // cols × rows = 한 시트당 스티커 수
+      'avery-22806':  { cols: 3,  rows: 4,  cellW: 50.8,  cellH: 50.8,  qrSize: 130, paddingMm: 2,   paper: 'letter' }, // 12칸
+      'avery-22816':  { cols: 3,  rows: 3,  cellW: 63.5,  cellH: 63.5,  qrSize: 160, paddingMm: 3,   paper: 'letter' }, // 9칸
+      'avery-5160':   { cols: 3,  rows: 10, cellW: 66.7,  cellH: 25.4,  qrSize: 70,  paddingMm: 1.5, paper: 'letter' }, // 30칸
+      'avery-5163':   { cols: 2,  rows: 5,  cellW: 101.6, cellH: 50.8,  qrSize: 130, paddingMm: 2,   paper: 'letter' }, // 10칸
+      // ─── 자유 배치 (rows 없음 = 그냥 모든 제품 1장씩) ───
       'grid-small':   { cols: null, qrSize: 80 },
       'grid-medium':  { cols: null, qrSize: 120 },
       'grid-large':   { cols: null, qrSize: 180 }
@@ -654,7 +648,7 @@
         grid.style.justifyContent = 'initial';
       }
 
-      const filtered = allProducts.filter(p => {
+      const baseFiltered = allProducts.filter(p => {
         if (catFilter !== 'all' && p.category !== catFilter) return false;
         if (!search) return true;
         return p.id.toLowerCase().includes(search) ||
@@ -664,7 +658,7 @@
 
       grid.innerHTML = '';
 
-      if (filtered.length === 0) {
+      if (baseFiltered.length === 0) {
         grid.innerHTML = '<div class="empty">' +
           (allProducts.length === 0
             ? 'Products 시트에 제품이 없습니다'
@@ -673,9 +667,34 @@
         return;
       }
 
-      filtered.forEach(p => {
+      // 스티커 용지일 때: 한 페이지의 칸 수만큼 QR 반복 (각 제품을 페이지 가득 채움)
+      // 자유 배치일 때: 1개씩 (기본 동작)
+      let filtered;
+      let pageBreakIndices = new Set();  // 인쇄 시 페이지 나누기 위치
+      if (preset && preset.cols && preset.rows) {
+        const sheetCount = preset.cols * preset.rows;
+        filtered = [];
+        baseFiltered.forEach((p, productIdx) => {
+          for (let i = 0; i < sheetCount; i++) {
+            filtered.push(p);
+          }
+          // 마지막 카드 위치 = 다음 페이지 시작 직전
+          if (productIdx < baseFiltered.length - 1) {
+            pageBreakIndices.add(filtered.length - 1);
+          }
+        });
+      } else {
+        filtered = baseFiltered;
+      }
+
+      filtered.forEach((p, idx) => {
         const card = document.createElement('div');
         card.className = 'qr-card';
+
+        // 인쇄 시 페이지 나누기 (각 제품 그룹의 마지막 카드)
+        if (pageBreakIndices.has(idx)) {
+          card.classList.add('page-break');
+        }
 
         if (preset && preset.cellH) {
           card.style.height  = preset.cellH + 'mm';
@@ -690,12 +709,17 @@
           card.appendChild(catEl);
         }
 
-        const dlBtn = document.createElement('button');
-        dlBtn.className = 'download-btn';
-        dlBtn.textContent = '↓';
-        dlBtn.title = 'PNG 다운로드';
-        dlBtn.onclick = (e) => { e.stopPropagation(); downloadSingle(p, errLevel); };
-        card.appendChild(dlBtn);
+        // 다운로드 버튼: 스티커 용지에서는 각 그룹의 첫 카드에만 표시 (중복 방지)
+        // 첫 카드 = idx가 0이거나, 이전 카드가 page-break였음
+        const isFirstOfGroup = idx === 0 || pageBreakIndices.has(idx - 1);
+        if (!preset || !preset.rows || isFirstOfGroup) {
+          const dlBtn = document.createElement('button');
+          dlBtn.className = 'download-btn';
+          dlBtn.textContent = '↓';
+          dlBtn.title = 'PNG 다운로드';
+          dlBtn.onclick = (e) => { e.stopPropagation(); downloadSingle(p, errLevel); };
+          card.appendChild(dlBtn);
+        }
 
         const canvas = document.createElement('canvas');
         card.appendChild(canvas);
@@ -728,11 +752,22 @@
         }).catch(err => console.error('QR 그리기 실패:', err));
       });
 
-      const filterCount = filtered.length;
-      const totalCount  = allProducts.length;
-      const counterText = filterCount === totalCount
-        ? `📦 총 <strong>${totalCount}</strong>개 제품`
-        : `🔍 <strong>${filterCount}</strong>개 표시 중 (전체 ${totalCount}개)`;
+      const productCount = baseFiltered.length;
+      const totalCount   = allProducts.length;
+      const isSheet = preset && preset.cols && preset.rows;
+      const stickersPerSheet = isSheet ? preset.cols * preset.rows : null;
+
+      let counterText;
+      if (isSheet) {
+        const totalStickers = filtered.length;
+        const totalPages    = productCount;  // 제품당 1페이지
+        counterText = `📦 <strong>${productCount}</strong>개 제품 × ${stickersPerSheet}칸 = ` +
+                      `<strong>${totalStickers}</strong>개 스티커 (${totalPages}페이지)`;
+      } else {
+        counterText = productCount === totalCount
+          ? `📦 총 <strong>${totalCount}</strong>개 제품`
+          : `🔍 <strong>${productCount}</strong>개 표시 중 (전체 ${totalCount}개)`;
+      }
       document.getElementById('infoRow').innerHTML = counterText;
     }
 
