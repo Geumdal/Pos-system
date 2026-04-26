@@ -253,12 +253,40 @@
 
     @media (max-width: 768px) {
       .options-grid { grid-template-columns: 1fr 1fr; }
+      header {
+        padding: 8px 12px;
+        flex-direction: column;
+        justify-content: center;
+        align-items: stretch;
+        gap: 6px;
+        height: auto;
+        min-height: 88px;
+      }
+      header h1 {
+        font-size: 14px;
+        text-align: center;
+        justify-content: center;
+      }
+      header .menu, header .nav {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 4px;
+        width: 100%;
+      }
+      .header-btn, .nav-btn {
+        padding: 6px 4px;
+        font-size: 11px;
+        border-radius: 10px;
+        gap: 2px;
+        min-width: 0;
+        overflow: hidden;
+        justify-content: center;
+      }
     }
     @media (max-width: 480px) {
-      header h1 { font-size: 14px; }
-      header h1 .label { display: none; }
-      .nav-btn { padding: 5px 8px; font-size: 11px; }
-      .nav-btn .label { display: none; }
+      header h1 { font-size: 13px; }
+      header h1 .label { display: inline; }
+      .nav-btn .label, .header-btn .label { display: none; }
       .options-grid { grid-template-columns: 1fr; }
     }
 
