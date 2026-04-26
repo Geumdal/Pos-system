@@ -93,6 +93,13 @@
     .nav-btn.success { background: #34c759; color: white; }
     .nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    .action-row {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-bottom: 12px;
+    }
+
     .panel {
       background: white;
       padding: 18px 20px;
@@ -171,6 +178,7 @@
       position: relative;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
+      box-sizing: border-box;
     }
     .qr-card canvas { display: block; margin: 0 auto; }
     .qr-name {
@@ -291,12 +299,23 @@
     }
 
     @media print {
-      body { background: white; padding: 0; }
-      header, .panel, .info-row, .toast { display: none !important; }
-      .qr-card { border: 1px dashed #ccc; break-inside: avoid; }
+      body { background: white; padding: 0; margin: 0; }
+      header, .panel, .info-row, .toast, .action-row { display: none !important; }
+      .content { padding: 0 !important; margin: 0 !important; }
+      .container { padding: 0 !important; margin: 0 !important; }
+      .qr-card {
+        border: none !important;        /* 인쇄 시 점선 테두리 제거 */
+        border-radius: 0 !important;
+        box-sizing: border-box !important;  /* 너비에 padding 포함 */
+        break-inside: avoid;
+      }
       .qr-card.page-break { page-break-after: always; break-after: page; }
-      .qr-grid { gap: 0 !important; max-width: none !important; }
-      .download-btn { display: none !important; }  /* 인쇄 시 다운로드 버튼 숨김 */
+      .qr-grid {
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .download-btn { display: none !important; }
       @page { margin: 8mm; }
     }
   </style>
@@ -316,7 +335,7 @@
   </header>
 
   <div class="content">
-    <div style="display:flex; gap:8px; justify-content:flex-end; margin-bottom:12px;">
+    <div class="action-row">
       <button class="nav-btn primary" onclick="window.print()" style="background:#007aff;">🖨️ 인쇄</button>
       <button class="nav-btn success" onclick="downloadAllAsZip()" id="zipBtn" style="background:#34c759;">📦 전체 ZIP</button>
     </div>
@@ -364,6 +383,22 @@
           </div>
         </div>
         <div class="option-group" style="grid-column: 1 / -1;">
+          <label>인쇄 모드</label>
+          <div class="checkbox-row" style="gap: 16px;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="radio" name="printMode" value="filtered" checked onchange="renderQRs()">
+              <span>현재 화면 제품만 (1장)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="radio" name="printMode" value="all" onchange="renderQRs()">
+              <span>전체 제품 일괄 (제품당 1장)</span>
+            </label>
+          </div>
+          <div style="font-size: 11px; color: #8e8e93; margin-top: 6px;">
+            💡 "현재 화면 제품만"은 검색/카테고리 필터로 1개 제품을 선택했을 때 권장
+          </div>
+        </div>
+        <div class="option-group" style="grid-column: 1 / -1;">
           <div id="paperInfo" style="background: #fff8e5; border: 1px solid #ffe5a3; color: #8a5a00; padding: 8px 12px; border-radius: 8px; font-size: 12px; display: none; align-items: center;"></div>
         </div>
       </div>
@@ -398,10 +433,15 @@
     const PRESETS = {
       // ─── Letter (미국 Avery) — 1" = 25.4mm ───
       // cols × rows = 한 시트당 스티커 수
-      'avery-22806':  { cols: 3,  rows: 4,  cellW: 50.8,  cellH: 50.8,  qrSize: 130, paddingMm: 2,   paper: 'letter' }, // 12칸
-      'avery-22816':  { cols: 3,  rows: 3,  cellW: 63.5,  cellH: 63.5,  qrSize: 160, paddingMm: 3,   paper: 'letter' }, // 9칸
-      'avery-5160':   { cols: 3,  rows: 10, cellW: 66.7,  cellH: 25.4,  qrSize: 70,  paddingMm: 1.5, paper: 'letter' }, // 30칸
-      'avery-5163':   { cols: 2,  rows: 5,  cellW: 101.6, cellH: 50.8,  qrSize: 130, paddingMm: 2,   paper: 'letter' }, // 10칸
+      // marginTop/Bottom/Left/Right = 페이지 여백 (인치)
+      'avery-22806':  { cols: 3,  rows: 4,  cellW: 50.8,  cellH: 50.8,  qrSize: 130, paddingMm: 2,   paper: 'letter',
+                        marginTop: '1in',     marginBottom: '1in',     marginLeft: '0.5in',     marginRight: '0.5in',     gapX: 0,    gapY: 0    }, // 12칸
+      'avery-22816':  { cols: 3,  rows: 3,  cellW: 63.5,  cellH: 63.5,  qrSize: 160, paddingMm: 3,   paper: 'letter',
+                        marginTop: '1in',     marginBottom: '1in',     marginLeft: '0.5in',     marginRight: '0.5in',     gapX: 0,    gapY: 0    }, // 9칸
+      'avery-5160':   { cols: 3,  rows: 10, cellW: 66.7,  cellH: 25.4,  qrSize: 70,  paddingMm: 1.5, paper: 'letter',
+                        marginTop: '0.5in',   marginBottom: '0.5in',   marginLeft: '0.1875in',  marginRight: '0.1875in',  gapX: 3.18, gapY: 0    }, // 30칸 (셀 간 가로 간격 0.125")
+      'avery-5163':   { cols: 2,  rows: 5,  cellW: 101.6, cellH: 50.8,  qrSize: 130, paddingMm: 2,   paper: 'letter',
+                        marginTop: '0.5in',   marginBottom: '0.5in',   marginLeft: '0.155in',   marginRight: '0.155in',   gapX: 3.18, gapY: 0    }, // 10칸
       // ─── 자유 배치 (rows 없음 = 그냥 모든 제품 1장씩) ───
       'grid-small':   { cols: null, qrSize: 80 },
       'grid-medium':  { cols: null, qrSize: 120 },
@@ -594,7 +634,22 @@
       }
       const preset = PRESETS[key];
       let css;
-      if (preset && preset.paper === 'letter') {
+      if (preset && preset.paper === 'letter' && preset.marginTop) {
+        // Avery 정확한 마진 사용
+        css = `@media print {
+          @page {
+            size: letter;
+            margin-top: ${preset.marginTop};
+            margin-right: ${preset.marginRight};
+            margin-bottom: ${preset.marginBottom};
+            margin-left: ${preset.marginLeft};
+          }
+          .qr-grid {
+            column-gap: ${preset.gapX || 0}mm !important;
+            row-gap: ${preset.gapY || 0}mm !important;
+          }
+        }`;
+      } else if (preset && preset.paper === 'letter') {
         css = '@media print { @page { size: letter; margin: 0.5in; } }';
       } else if (preset && preset.paper === 'A4') {
         css = '@media print { @page { size: A4; margin: 8mm; } }';
@@ -643,9 +698,14 @@
       if (preset && preset.cols) {
         grid.style.gridTemplateColumns = `repeat(${preset.cols}, ${preset.cellW}mm)`;
         grid.style.justifyContent = 'center';
+        // 셀 간격 적용 (Avery 5160/5163 같이 간격이 있는 스티커)
+        grid.style.columnGap = (preset.gapX || 0) + 'mm';
+        grid.style.rowGap = (preset.gapY || 0) + 'mm';
       } else {
         grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${qrSize + 40}px, 1fr))`;
         grid.style.justifyContent = 'initial';
+        grid.style.columnGap = '';
+        grid.style.rowGap = '';
       }
 
       const baseFiltered = allProducts.filter(p => {
@@ -667,6 +727,10 @@
         return;
       }
 
+      // 인쇄 모드 (filtered = 현재 화면, all = 전체 일괄)
+      const printModeEl = document.querySelector('input[name="printMode"]:checked');
+      const printMode = printModeEl ? printModeEl.value : 'filtered';
+
       // 스티커 용지일 때: 한 페이지의 칸 수만큼 QR 반복 (각 제품을 페이지 가득 채움)
       // 자유 배치일 때: 1개씩 (기본 동작)
       let filtered;
@@ -678,8 +742,9 @@
           for (let i = 0; i < sheetCount; i++) {
             filtered.push(p);
           }
-          // 마지막 카드 위치 = 다음 페이지 시작 직전
-          if (productIdx < baseFiltered.length - 1) {
+          // "전체 제품 일괄" 모드일 때만 페이지 나누기 (제품마다 새 페이지)
+          // "현재 화면 제품만" 모드는 페이지 나누지 않음 (마지막 제품 후엔 어차피 끝)
+          if (printMode === 'all' && productIdx < baseFiltered.length - 1) {
             pageBreakIndices.add(filtered.length - 1);
           }
         });
@@ -760,8 +825,11 @@
       let counterText;
       if (isSheet) {
         const totalStickers = filtered.length;
-        const totalPages    = productCount;  // 제품당 1페이지
-        counterText = `📦 <strong>${productCount}</strong>개 제품 × ${stickersPerSheet}칸 = ` +
+        // "현재 화면 제품만" 모드: 항상 1페이지 (모든 제품이 한 시트에 섞임)
+        // "전체 제품 일괄" 모드: 제품당 1페이지
+        const totalPages = printMode === 'all' ? productCount : 1;
+        const modeLabel  = printMode === 'all' ? '전체 일괄' : '현재 화면';
+        counterText = `🖨️ <strong>${modeLabel}</strong> · ${productCount}개 제품 × ${stickersPerSheet}칸 = ` +
                       `<strong>${totalStickers}</strong>개 스티커 (${totalPages}페이지)`;
       } else {
         counterText = productCount === totalCount
