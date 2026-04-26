@@ -32,6 +32,7 @@
     header h1 {
       font-size: 16px; font-weight: 700;
       display: inline-flex; align-items: center; gap: 6px;
+      white-space: nowrap;
     }
     header .menu { display: flex; gap: 6px; align-items: center; }
     .header-btn {
@@ -41,6 +42,7 @@
       display: inline-flex; align-items: center; gap: 4px;
       transition: background 0.15s;
       white-space: nowrap;
+      justify-content: center;
     }
     .header-btn:hover { background: rgba(255,255,255,0.2); }
     .header-btn.active {
@@ -187,6 +189,32 @@
     }
     .cat-tab.active {
       background: #1d1d1f; color: white; border-color: #1d1d1f;
+    }
+    /* 카테고리 드롭다운 */
+    .cat-select {
+      width: 100%;
+      padding: 11px 14px;
+      padding-right: 36px;  /* 화살표 공간 */
+      background: white;
+      border: 1px solid #e5e5ea;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #1d1d1f;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3e%3cpath fill='%231d1d1f' d='M6 8L0 0h12z'/%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      background-size: 12px;
+      font-family: inherit;
+    }
+    .cat-select:focus {
+      outline: none;
+      border-color: #007aff;
+      box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
     }
 
     .product-grid {
@@ -473,38 +501,47 @@
     /* ─── 모바일 반응형 ─── */
     @media (max-width: 768px) {
       .app {
-        grid-template-rows: 48px 1fr;
+        grid-template-rows: 88px 1fr;  /* 헤더 2줄 (제목 + 메뉴) */
         height: 100vh;
         height: 100dvh;  /* 모바일 동적 뷰포트 */
       }
       header {
-        padding: 0 10px;
-        flex-wrap: nowrap;
+        padding: 8px 12px;
+        flex-direction: column;        /* 세로 배치 (2줄) */
+        justify-content: center;
+        align-items: stretch;
         gap: 6px;
         overflow: hidden;
+        height: 88px;
       }
       header h1 {
         font-size: 14px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        flex-shrink: 1;
+        text-align: center;
+        justify-content: center;
       }
       header .menu {
+        display: grid;                            /* 그리드로 균등 분배 */
+        grid-template-columns: repeat(5, 1fr);    /* 5개 메뉴 균등 */
         gap: 4px;
-        flex-shrink: 0;
+        width: 100%;
       }
       .header-btn {
-        padding: 5px 8px;
+        padding: 6px 4px;
         font-size: 11px;
-        border-radius: 12px;
+        border-radius: 10px;
         white-space: nowrap;
+        gap: 2px;
+        min-width: 0;       /* 그리드 셀에 맞게 줄어들 수 있게 */
+        overflow: hidden;
       }
       .main {
         grid-template-columns: 1fr;
         grid-template-rows: minmax(0, 1fr) auto;
-        height: calc(100vh - 48px);
-        height: calc(100dvh - 48px);
+        height: calc(100vh - 88px);
+        height: calc(100dvh - 88px);
         overflow: hidden;
       }
       .products-pane {
@@ -643,13 +680,13 @@
     <div class="main">
       <div class="products-pane">
         <div class="action-buttons">
-          <button class="action-btn primary" onclick="openManualEntry()">
-            <span>⌨️ 직접 입력</span>
-            <span class="ab-hint">제품명/ID로 빠른 검색 (추천)</span>
-          </button>
-          <button class="action-btn secondary" onclick="openScanner()">
+          <button class="action-btn primary" onclick="openScanner()">
             <span>📷 QR 스캔</span>
-            <span class="ab-hint">모바일 권장</span>
+            <span class="ab-hint">제품 QR로 빠른 추가 (추천)</span>
+          </button>
+          <button class="action-btn secondary" onclick="openManualEntry()">
+            <span>⌨️ 직접 입력</span>
+            <span class="ab-hint">제품명/ID 검색</span>
           </button>
         </div>
 
@@ -950,16 +987,28 @@
 
     function renderCategories() {
       const wrap = document.getElementById('categories');
-      wrap.innerHTML = categories.map(c =>
-        `<button class="cat-tab ${c === activeCategory ? 'active' : ''}"
-                 onclick="selectCategory('${c.replace(/'/g, "\\'")}')">${c}</button>`
+      const opts = categories.map(c =>
+        `<option value="${escapeAttr(c)}" ${c === activeCategory ? 'selected' : ''}>${escapeHtml(c)}</option>`
       ).join('');
+      wrap.innerHTML = `
+        <select class="cat-select" id="catSelect" onchange="selectCategory(this.value)">
+          ${opts}
+        </select>
+      `;
     }
 
     function selectCategory(c) {
       activeCategory = c;
-      renderCategories();
+      // 드롭다운 직접 변경 시 다시 렌더링 안 해도 되지만, API 호출 후엔 필요
+      const sel = document.getElementById('catSelect');
+      if (sel && sel.value !== c) sel.value = c;
       renderProducts();
+    }
+
+    function escapeAttr(s) {
+      return String(s).replace(/[&<>"']/g, m => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[m]));
     }
 
     function renderProducts() {
