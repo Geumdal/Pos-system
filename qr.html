@@ -307,8 +307,23 @@
         text-align: center;
       }
       /* 메뉴에서 아이콘(이모지) 숨김 - label만 표시 */
-      .header-btn { font-size: 0; }                   /* 컨테이너 폰트 0 → 이모지 사라짐 */
-      .header-btn .label { font-size: 11px; }          /* 라벨만 다시 보이게 */
+      /* 모바일 메뉴: 이모지 숨기고 글자만 - color transparent 방식 (안전) */
+      .header-btn {
+        font-size: 11px;
+        gap: 0 !important;
+        white-space: nowrap;
+        color: transparent;
+      }
+      .header-btn .label {
+        font-size: 11px;
+        color: white;
+      }
+      .header-btn.active {
+        color: transparent;
+      }
+      .header-btn.active .label {
+        color: #1d1d1f;
+      }
       .header-btn.label-hidden { font-size: 11px; }    /* fallback */
 
       /* 인쇄/ZIP 버튼: 화면에 딱 맞게 - 균등 분배 */
@@ -450,6 +465,22 @@
       }
       .download-btn { display: none !important; }
       @page { margin: 8mm; }
+    }
+
+    /* 푸터 */
+    .app-footer {
+      background: #1d1d1f;
+      color: rgba(255,255,255,0.5);
+      text-align: center;
+      padding: 16px 12px;
+      font-size: 12px;
+      margin-top: 24px;
+      line-height: 1.6;
+    }
+    .app-footer .footer-meta {
+      font-size: 10px;
+      color: rgba(255,255,255,0.3);
+      margin-top: 4px;
     }
   </style>
 <script src="config.js"></script>
@@ -1086,5 +1117,11 @@
       });
     }
   </script>
+
+  <footer class="app-footer">
+    <div>🛒 가든교회 물품 판매 관리 시스템 © 2026</div>
+    <div class="footer-meta">Garden Church · Powered by Google Apps Script</div>
+  </footer>
+
 </body>
 </html>

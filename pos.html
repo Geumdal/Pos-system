@@ -546,8 +546,26 @@
         justify-content: center;
       }
       /* 모바일 메뉴: 아이콘 숨기고 글자만 */
-      .header-btn { font-size: 0; }
-      .header-btn .label { font-size: 11px; }
+      /* 모바일 메뉴: 첫 번째 자식(이모지)만 숨기고 라벨만 표시 */
+      .header-btn {
+        font-size: 11px;
+        gap: 0 !important;
+        white-space: nowrap;
+      }
+      /* 이모지(첫 번째 자식 텍스트 노드)는 시각적으로 숨김 */
+      .header-btn::first-letter { display: none; }
+      /* span.label만 표시 - 앞 공백 정리 */
+      .header-btn .label {
+        font-size: 11px;
+        display: inline-block;
+        text-indent: 0;
+        margin-left: 0;
+      }
+      /* 더 강력한 방법: 헤더버튼 안의 직접 텍스트(이모지)만 숨김 */
+      .header-btn { color: transparent; }
+      .header-btn .label { color: white; }
+      .header-btn.active { color: transparent; }
+      .header-btn.active .label { color: #1d1d1f; }
       /* 가로 overflow 방지 */
       html, body { overflow-x: hidden; max-width: 100vw; }
       .main {
@@ -571,12 +589,13 @@
         display: flex;
         flex-direction: column;
         background: #f0f4f8;
-        max-height: 200px;        /* 기본: 접힌 상태 (헤더+요약+결제버튼만) */
+        max-height: 240px;        /* 기본: 접힌 상태 - 헤더+요약+결제버튼 모두 보이도록 충분히 */
         transition: max-height 0.25s ease;
         overflow: hidden;
+        flex-shrink: 0;            /* 다른 요소가 줄어도 cart-pane는 안 줄어듦 */
       }
       .cart-pane.expanded {
-        max-height: 70vh;          /* 펼침: 항목 보이게 */
+        max-height: 70vh;
         max-height: 70dvh;
       }
       .cart-header {
