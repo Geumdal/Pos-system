@@ -541,9 +541,15 @@
         border-radius: 10px;
         white-space: nowrap;
         gap: 2px;
-        min-width: 0;       /* 그리드 셀에 맞게 줄어들 수 있게 */
+        min-width: 0;
         overflow: hidden;
+        justify-content: center;
       }
+      /* 모바일 메뉴: 아이콘 숨기고 글자만 */
+      .header-btn { font-size: 0; }
+      .header-btn .label { font-size: 11px; }
+      /* 가로 overflow 방지 */
+      html, body { overflow-x: hidden; max-width: 100vw; }
       .main {
         grid-template-columns: 1fr;
         grid-template-rows: minmax(0, 1fr) auto;
