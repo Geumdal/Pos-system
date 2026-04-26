@@ -10,30 +10,41 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
       background: #f5f5f7;
       color: #1d1d1f;
-      padding: 16px;
+      padding: 0;
     }
-    .container { max-width: 1200px; margin: 0 auto; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0; }
+    .content { padding: 16px; }
     button { font-family: inherit; cursor: pointer; }
 
     header {
-      background: white;
-      border-radius: 14px;
-      padding: 16px 20px;
-      margin-bottom: 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
+      background: #1d1d1f; color: white;
+      padding: 0 16px;
+      height: 56px;
+      display: flex; justify-content: space-between; align-items: center;
+      margin: 0 0 16px 0;
+      border-radius: 0;
     }
-    header h1 { font-size: 20px; font-weight: 700; }
-    .nav { display: flex; gap: 8px; flex-wrap: wrap; }
-    .nav-btn {
-      padding: 8px 14px; background: #f5f5f7; color: #1d1d1f;
-      border: none; border-radius: 8px; font-size: 13px;
-      text-decoration: none; cursor: pointer; font-family: inherit;
+    header h1 {
+      font-size: 16px; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    header .menu, header .nav {
+      display: flex; gap: 6px; align-items: center;
+    }
+    .header-btn, .nav-btn {
+      background: rgba(255,255,255,0.12); color: white;
+      padding: 7px 13px; border: none; border-radius: 16px;
+      font-size: 13px; text-decoration: none;
       display: inline-flex; align-items: center; gap: 4px;
+      transition: background 0.15s;
+      white-space: nowrap;
+      cursor: pointer; font-family: inherit;
     }
+    .header-btn:hover, .nav-btn:hover { background: rgba(255,255,255,0.2); }
+    .header-btn.active, .nav-btn.active {
+      background: white; color: #1d1d1f; font-weight: 700;
+    }
+    .header-btn.active:hover, .nav-btn.active:hover { background: white; }
     .nav-btn.primary { background: #007aff; color: white; }
 
     .toolbar {
@@ -490,17 +501,21 @@
   <script src="assets/api.js"></script>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>📋<span class="label"> 제품 관리</span></h1>
-      <div class="nav">
-        <a class="nav-btn" href="pos.html">←<span class="label"> POS</span></a>
-        <a class="nav-btn" href="stockin.html">📥<span class="label"> 입고</span></a>
-        <a class="nav-btn" href="qr.html">🏷️<span class="label"> QR</span></a>
-        <a class="nav-btn" href="stats.html">📊<span class="label"> 통계</span></a>
-        <button class="nav-btn primary" onclick="reload()">🔄<span class="label"> 새로고침</span></button>
-      </div>
-    </header>
+  <header>
+    <h1>📋<span class="label"> 제품 관리</span></h1>
+    <div class="menu">
+      <a class="header-btn" href="pos.html">🛒<span class="label"> POS</span></a>
+      <a class="header-btn" href="stockin.html">📥<span class="label"> 입고</span></a>
+      <a class="header-btn active" href="admin.html">📋<span class="label"> 제품관리</span></a>
+      <a class="header-btn" href="qr.html">🏷️<span class="label"> QR</span></a>
+      <a class="header-btn" href="stats.html">📊<span class="label"> 통계</span></a>
+    </div>
+  </header>
+
+  <div class="content">
+    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+      <button class="nav-btn primary" onclick="reload()" style="background:#007aff;">🔄 새로고침</button>
+    </div>
 
     <div class="stats-row">
       <div class="stat-card">

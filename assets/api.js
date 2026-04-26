@@ -111,6 +111,25 @@ function fmtUSD(amount) {
   });
 }
 
+/**
+ * 제품명에서 카테고리/가격 부분을 제거해 깔끔한 이름만 반환
+ * 예: "장류 [된장 ($40)]" -> "된장"
+ *     "양념류 [고운 고추가루 ($30)]" -> "고운 고추가루"
+ *     "된장" -> "된장" (이미 깔끔하면 그대로)
+ */
+function cleanProductName(name) {
+  if (!name) return '';
+  let s = String(name).trim();
+  // 패턴: "카테고리 [제품명 ($가격)]" - 대괄호 안 추출
+  const bracketMatch = s.match(/\[([^\]]+)\]/);
+  if (bracketMatch) {
+    s = bracketMatch[1].trim();
+  }
+  // 끝에 ($숫자) 또는 (숫자원) 같은 가격 표시 제거
+  s = s.replace(/\s*\([\$₩￦]?\s*[\d,]+\.?\d*\s*[원$￦]?\)\s*$/i, '').trim();
+  return s || name;  // 비어있으면 원본 반환
+}
+
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, m => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'

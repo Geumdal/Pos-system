@@ -18,27 +18,53 @@
     button { font-family: inherit; cursor: pointer; }
 
     .app {
+      max-width: 1100px; margin: 0 auto;
+      padding: 0;
+    }
+    .content {
       max-width: 900px; margin: 0 auto;
       padding: 16px;
     }
 
     header {
-      background: white;
-      border-radius: 14px;
-      padding: 14px 18px;
-      margin-bottom: 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
+      background: #1d1d1f; color: white;
+      padding: 0 16px;
+      height: 56px;
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 0;
     }
-    header h1 { font-size: 18px; font-weight: 700; }
-    .nav { display: flex; gap: 6px; flex-wrap: wrap; }
+    header h1 {
+      font-size: 16px; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    header .menu { display: flex; gap: 6px; align-items: center; }
+    .header-btn {
+      background: rgba(255,255,255,0.12); color: white;
+      padding: 7px 13px; border: none; border-radius: 16px;
+      font-size: 13px; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+      transition: background 0.15s;
+      white-space: nowrap;
+      cursor: pointer; font-family: inherit;
+    }
+    .header-btn:hover { background: rgba(255,255,255,0.2); }
+    .header-btn.active {
+      background: white; color: #1d1d1f; font-weight: 700;
+    }
+    .header-btn.active:hover { background: white; }
+    /* 호환성: 기존 nav 클래스 사용하는 곳 대응 */
+    .nav { display: flex; gap: 6px; align-items: center; }
     .nav-btn {
-      padding: 7px 12px; background: #f5f5f7; color: #1d1d1f;
-      border: none; border-radius: 8px; font-size: 12px;
-      text-decoration: none; cursor: pointer; font-family: inherit;
+      background: rgba(255,255,255,0.12); color: white;
+      padding: 7px 13px; border: none; border-radius: 16px;
+      font-size: 13px; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+      white-space: nowrap;
+      cursor: pointer; font-family: inherit;
+    }
+    .nav-btn:hover { background: rgba(255,255,255,0.2); }
+    .nav-btn.active {
+      background: white; color: #1d1d1f; font-weight: 700;
     }
     .nav-btn.primary { background: #007aff; color: white; }
 
@@ -367,17 +393,18 @@
   <script src="assets/api.js"></script>
 </head>
 <body>
-  <div class="app">
-    <header>
-      <h1>📥<span class="label"> 입고 처리</span></h1>
-      <div class="nav">
-        <a class="nav-btn" href="pos.html">←<span class="label"> POS</span></a>
-        <a class="nav-btn" href="admin.html">📋<span class="label"> 제품관리</span></a>
-        <a class="nav-btn" href="qr.html">🏷️<span class="label"> QR</span></a>
-        <a class="nav-btn" href="stats.html">📊<span class="label"> 통계</span></a>
-      </div>
-    </header>
+  <header>
+    <h1>📥<span class="label"> 입고 처리</span></h1>
+    <div class="menu">
+      <a class="header-btn" href="pos.html">🛒<span class="label"> POS</span></a>
+      <a class="header-btn active" href="stockin.html">📥<span class="label"> 입고</span></a>
+      <a class="header-btn" href="admin.html">📋<span class="label"> 제품관리</span></a>
+      <a class="header-btn" href="qr.html">🏷️<span class="label"> QR</span></a>
+      <a class="header-btn" href="stats.html">📊<span class="label"> 통계</span></a>
+    </div>
+  </header>
 
+  <div class="content">
     <div class="summary-row">
       <div class="summary-card">
         <div class="l">오늘 입고 횟수</div>
@@ -535,7 +562,7 @@
         return `
           <div class="history-item">
             <div class="hi-row1">
-              <span class="hi-name">${escapeHtml(s.name)}</span>
+              <span class="hi-name">${escapeHtml(cleanProductName(s.name))}</span>
               <span class="hi-qty">+${s.quantity}</span>
             </div>
             <div class="hi-row2">
@@ -616,7 +643,7 @@
     /* ─── 수량 입력 모달 ─── */
     function openQuantityModal(product) {
       currentProduct = product;
-      document.getElementById('qmName').textContent = product.name;
+      document.getElementById('qmName').textContent = cleanProductName(product.name);
       document.getElementById('qmId').textContent = product.id;
       document.getElementById('qmCategory').textContent = product.category;
       document.getElementById('qmPrice').textContent =
@@ -731,7 +758,7 @@
       results.innerHTML = filtered.map(p => `
         <div class="manual-result-item" onclick="selectFromManual('${escapeAttr(p.id)}')">
           <div>
-            <div class="mri-name">${escapeHtml(p.name)}</div>
+            <div class="mri-name">${escapeHtml(cleanProductName(p.name))}</div>
             <div class="mri-meta">${escapeHtml(p.id)} · ${escapeHtml(p.category)} · 재고 ${p.stock}</div>
           </div>
           <button class="mri-action">선택</button>
