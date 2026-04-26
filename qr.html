@@ -410,9 +410,9 @@
         <input type="text" id="searchBox" placeholder="🔍 제품명, ID, 카테고리로 검색..."
                oninput="renderQRs()"
                style="flex: 1; min-width: 200px; padding: 10px 14px; border: 1px solid #e5e5ea; border-radius: 8px; font-size: 14px; font-family: inherit;">
-        <select id="categoryFilter" onchange="renderQRs()"
-                style="padding: 10px 14px; border: 1px solid #e5e5ea; border-radius: 8px; font-size: 14px; font-family: inherit; background: white;">
-          <option value="all">전체 카테고리</option>
+        <select id="productFilter" onchange="renderQRs()"
+                style="padding: 10px 14px; border: 1px solid #e5e5ea; border-radius: 8px; font-size: 14px; font-family: inherit; background: white; min-width: 180px; max-width: 280px;">
+          <option value="all">전체 제품</option>
         </select>
         <button class="nav-btn" onclick="reload()">🔄</button>
       </div>
@@ -605,11 +605,25 @@
       allProducts = res.products || [];
       categories = res.categories || ['전체'];
 
-      const select = document.getElementById('categoryFilter');
-      select.innerHTML = '<option value="all">전체 카테고리</option>' +
-        categories.filter(c => c !== '전체').map(c =>
-          `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`
-        ).join('');
+      const select = document.getElementById('productFilter');
+      // 카테고리별로 제품 그룹화 → optgroup 사용
+      const byCategory = {};
+      allProducts.forEach(p => {
+        const cat = p.category || '기타';
+        if (!byCategory[cat]) byCategory[cat] = [];
+        byCategory[cat].push(p);
+      });
+
+      let html = '<option value="all">전체 제품</option>';
+      Object.keys(byCategory).sort().forEach(cat => {
+        html += `<optgroup label="${escapeHtml(cat)}">`;
+        byCategory[cat].forEach(p => {
+          const cleanName = cleanProductName(p.name);
+          html += `<option value="${escapeHtml(p.id)}">${escapeHtml(cleanName)} (${escapeHtml(p.id)})</option>`;
+        });
+        html += '</optgroup>';
+      });
+      select.innerHTML = html;
 
       document.getElementById('infoRow').innerHTML =
         `📦 총 <strong>${allProducts.length}</strong>개 제품 · ${categories.length - 1}개 카테고리`;
@@ -686,7 +700,7 @@
 
       const presetKey    = document.getElementById('presetSelect').value;
       const search       = document.getElementById('searchBox').value.trim().toLowerCase();
-      const catFilter    = document.getElementById('categoryFilter').value;
+      const productFilter = document.getElementById('productFilter').value;
       const qrSize       = parseInt(document.getElementById('qrSize').value, 10) || 100;
       const errLevel     = document.getElementById('errorLevel').value;
       const showName     = document.getElementById('showName').checked;
@@ -709,7 +723,7 @@
       }
 
       const baseFiltered = allProducts.filter(p => {
-        if (catFilter !== 'all' && p.category !== catFilter) return false;
+        if (productFilter !== 'all' && p.id !== productFilter) return false;
         if (!search) return true;
         return p.id.toLowerCase().includes(search) ||
                p.name.toLowerCase().includes(search) ||
@@ -858,9 +872,9 @@
 
     async function downloadAllAsZip() {
       const search = document.getElementById('searchBox').value.trim().toLowerCase();
-      const catFilter = document.getElementById('categoryFilter').value;
+      const productFilter = document.getElementById('productFilter').value;
       const filtered = allProducts.filter(p => {
-        if (catFilter !== 'all' && p.category !== catFilter) return false;
+        if (productFilter !== 'all' && p.id !== productFilter) return false;
         if (!search) return true;
         return p.id.toLowerCase().includes(search) ||
                p.name.toLowerCase().includes(search);
