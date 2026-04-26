@@ -238,7 +238,9 @@
   </header>
 
   <div class="content">
-    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+    <div style="display:flex; justify-content:flex-end; gap: 8px; margin-bottom:8px;">
+      <button class="nav-btn" onclick="openResetModal()"
+              style="background:#ff3b30; color:white;">🗑️ 데이터 초기화</button>
       <button class="nav-btn primary" onclick="loadStats()" style="background:#007aff; color:white;">🔄 새로고침</button>
     </div>
 
@@ -525,6 +527,114 @@
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
       });
+    }
+  </script>
+
+  <!-- 데이터 초기화 모달 -->
+  <div id="resetModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:white; border-radius:16px; padding:24px; max-width:440px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="font-size:48px; margin-bottom:8px;">⚠️</div>
+        <h2 style="font-size:20px; font-weight:700; color:#ff3b30; margin-bottom:4px;">데이터 초기화</h2>
+        <div style="font-size:13px; color:#8e8e93;">이 작업은 되돌릴 수 없습니다</div>
+      </div>
+
+      <div style="background:#fff5f5; border:1px solid #ffd5d5; border-radius:10px; padding:14px; margin-bottom:16px;">
+        <div style="font-size:13px; font-weight:600; color:#c62828; margin-bottom:8px;">🗑️ 다음 데이터가 삭제됩니다:</div>
+        <ul style="font-size:12px; color:#666; margin:0; padding-left:20px; line-height:1.7;">
+          <li>모든 거래 기록 (Sales 시트)</li>
+          <li>모든 판매 항목 (SaleItems 시트)</li>
+          <li>모든 입고 기록 (StockIn 시트)</li>
+          <li>제품의 판매수 → 0으로 리셋</li>
+          <li>제품의 보유수 → 시작 재고로 복원</li>
+        </ul>
+      </div>
+
+      <div style="background:#f0f9ff; border:1px solid #c5e7ff; border-radius:10px; padding:12px; margin-bottom:16px;">
+        <div style="font-size:12px; color:#0369a1;">
+          ✅ <strong>유지되는 정보:</strong> 제품 목록, 가격, 재고
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:13px; font-weight:600; color:#1d1d1f; margin-bottom:6px;">
+          확인을 위해 다음 코드를 입력하세요:
+        </label>
+        <div style="font-family:monospace; font-size:14px; background:#f5f5f7; padding:8px 12px; border-radius:6px; margin-bottom:8px; user-select:all;">
+          RESET-CONFIRM-2026
+        </div>
+        <input type="text" id="resetConfirmInput" placeholder="여기에 정확히 입력..."
+               oninput="checkResetCode()"
+               style="width:100%; padding:12px 14px; border:1px solid #e5e5ea; border-radius:8px; font-size:14px; font-family:monospace;">
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <button onclick="closeResetModal()"
+                style="padding:12px; background:#e5e5ea; color:#1d1d1f; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;">
+          취소
+        </button>
+        <button id="resetConfirmBtn" onclick="confirmReset()" disabled
+                style="padding:12px; background:#ff3b30; color:white; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; opacity:0.5;">
+          🗑️ 초기화 실행
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" style="position:fixed; top:24px; left:50%; transform:translateX(-50%); padding:12px 24px; border-radius:8px; color:white; font-size:14px; z-index:10000; opacity:0; transition:opacity 0.3s;"></div>
+
+  <script>
+    function openResetModal() {
+      document.getElementById('resetConfirmInput').value = '';
+      document.getElementById('resetConfirmBtn').disabled = true;
+      document.getElementById('resetConfirmBtn').style.opacity = '0.5';
+      document.getElementById('resetModal').style.display = 'flex';
+    }
+
+    function closeResetModal() {
+      document.getElementById('resetModal').style.display = 'none';
+    }
+
+    function checkResetCode() {
+      const code = document.getElementById('resetConfirmInput').value.trim();
+      const btn = document.getElementById('resetConfirmBtn');
+      if (code === 'RESET-CONFIRM-2026') {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+      } else {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+      }
+    }
+
+    async function confirmReset() {
+      const btn = document.getElementById('resetConfirmBtn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '⏳ 처리 중...';
+
+      try {
+        const res = await api('resetAllStats', { confirmCode: 'RESET-CONFIRM-2026' });
+
+        if (res.success) {
+          const d = res.details || {};
+          const summary = `✅ 초기화 완료!\n\n` +
+                          `삭제된 거래: ${d.salesCleared || 0}건\n` +
+                          `삭제된 항목: ${d.saleItemsCleared || 0}개\n` +
+                          `삭제된 입고: ${d.stockInCleared || 0}건\n` +
+                          `리셋된 제품: ${d.productsReset || 0}개`;
+          alert(summary);
+          closeResetModal();
+          loadStats();  // 통계 다시 로드
+        } else {
+          alert('❌ 초기화 실패: ' + (res.message || '알 수 없는 오류'));
+        }
+      } catch (err) {
+        alert('❌ 네트워크 오류: ' + err.message);
+      } finally {
+        btn.innerHTML = originalText;
+        checkResetCode();  // 버튼 상태 복원
+      }
     }
   </script>
 </body>
