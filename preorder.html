@@ -677,9 +677,8 @@
       const search = document.getElementById('productSearch').value.trim().toLowerCase();
       const list = document.getElementById('productList');
 
-      // 활성 제품 + 검색 필터
+      // 백엔드에서 이미 비활성 제외 → 검색 필터만 적용
       const filtered = allProducts.filter(p => {
-        if (!p.active) return false;
         if (!search) return true;
         return (p.id + ' ' + p.name + ' ' + (p.category || '')).toLowerCase().includes(search);
       });

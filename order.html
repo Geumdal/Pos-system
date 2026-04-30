@@ -557,7 +557,9 @@
           return;
         }
         // 활성 + 재고 0 초과만 표시
-        allProducts = (res.products || []).filter(p => p.active);
+        // 백엔드 getProducts는 이미 비활성 제품을 제외하고 반환함
+        // 여기서는 재고 0인 제품도 표시 (품절로 표시)
+        allProducts = res.products || [];
 
         // 카테고리 추출
         const catSet = new Set(['all']);
