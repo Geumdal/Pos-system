@@ -138,6 +138,38 @@
       padding: 8px 14px; background: #f5f5f7; color: #1d1d1f;
       border: none; border-radius: 8px; font-size: 13px; cursor: pointer;
     }
+    .btn-delete {
+      padding: 8px 12px; background: #fff5f5; color: #ff3b30;
+      border: 1px solid #ffd5d5; border-radius: 8px;
+      font-size: 13px; cursor: pointer;
+    }
+    .btn-delete:hover { background: #ff3b30; color: white; border-color: #ff3b30; }
+    .nav-btn.danger { background: #ff3b30; color: white; }
+    .nav-btn.danger:hover { background: #d70015; }
+
+    /* 확인 모달 (삭제/초기화) */
+    .confirm-modal {
+      max-width: 440px; padding: 24px;
+    }
+    .confirm-modal h2 {
+      font-size: 18px; margin-bottom: 12px;
+      color: #ff3b30;
+    }
+    .confirm-modal .info-box {
+      background: #f5f5f7; padding: 12px; border-radius: 10px;
+      font-size: 13px; line-height: 1.6; margin-bottom: 14px;
+    }
+    .confirm-modal .warn-box {
+      background: #fff5f5; border: 1px solid #ffd5d5;
+      padding: 12px; border-radius: 10px;
+      font-size: 12px; color: #c62828; line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .confirm-modal input {
+      width: 100%; padding: 12px;
+      border: 1px solid #d1d1d6; border-radius: 8px;
+      font-size: 14px; font-family: inherit; margin-bottom: 14px;
+    }
 
     .empty-state {
       text-align: center; padding: 60px 20px; color: #8e8e93;
@@ -291,6 +323,7 @@
       </div>
       <input type="text" id="searchInput" placeholder="🔍 고객명/연락처 검색..." oninput="renderList()">
       <button class="nav-btn primary" onclick="loadOutstanding()">🔄 새로고침</button>
+      <button class="nav-btn danger" onclick="resetAll()" style="background:#ff3b30; color:white;">⚠️ 전체 초기화</button>
     </div>
 
     <div class="item-list" id="itemList">
@@ -432,6 +465,7 @@
                 ${item.customerPhone ? `<button class="btn-detail" onclick="showCustomerPopup('${escapeAttr(item.customerPhone)}', loadOutstanding)" title="이 고객의 모든 거래 보기">👤 합산</button>` : ''}
                 <button class="btn-detail" onclick="showDetail('${item.saleId}')">상세</button>
                 ${isUnpaid ? `<button class="btn-pay" onclick="openPayModal('${item.saleId}', '${escapeAttr(item.customerName)}', ${item.amount})">💰 결제</button>` : ''}
+                <button class="btn-delete" onclick="deleteOne('${item.saleId}', '${escapeAttr(item.customerName)}', ${item.amount})" title="이 외상 기록 삭제">🗑️</button>
               </div>
             </div>
           </div>
@@ -517,6 +551,49 @@
         );
       } catch (err) {
         showToast('조회 실패: ' + err.message, 'error');
+      }
+    }
+
+    /* ─── 삭제 / 초기화 ─── */
+    async function deleteOne(saleId, customerName, amount) {
+      if (!confirm(`외상 기록을 삭제하시겠어요?\n\n👤 ${customerName}\n💰 ${fmtUSD(amount)}\n\n⚠️ 이 작업은 되돌릴 수 없습니다.`)) return;
+
+      try {
+        const res = await api('deleteOutstanding', { saleId: saleId });
+        if (res.success) {
+          showToast('🗑️ 외상 기록 삭제 완료', 'success');
+          loadOutstanding();
+        } else {
+          showToast(res.message || '삭제 실패', 'error');
+        }
+      } catch (err) {
+        showToast('오류: ' + err.message, 'error');
+      }
+    }
+
+    async function resetAll() {
+      const totalCount = allItems.length;
+      if (totalCount === 0) {
+        showToast('삭제할 외상이 없습니다', 'error');
+        return;
+      }
+
+      if (!confirm(
+        `⚠️ 모든 외상 기록을 삭제하시겠어요?\n\n` +
+        `총 ${totalCount}건이 영구 삭제됩니다.\n` +
+        `이 작업은 되돌릴 수 없습니다.`
+      )) return;
+
+      try {
+        const res = await api('resetAllOutstanding', { confirmCode: 'RESET-OUTSTANDING-2026' });
+        if (res.success) {
+          showToast(`✅ 외상 ${res.deleted || 0}건 모두 삭제됨`, 'success');
+          loadOutstanding();
+        } else {
+          showToast(res.message || '실패', 'error');
+        }
+      } catch (err) {
+        showToast('오류: ' + err.message, 'error');
       }
     }
 

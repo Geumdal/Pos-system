@@ -129,6 +129,8 @@
 
     .customer-amount {
       text-align: right; min-width: 110px;
+      display: flex; flex-direction: column; gap: 8px;
+      align-items: flex-end;
     }
     .customer-amount .total {
       font-size: 18px; font-weight: 700; color: #1d1d1f;
@@ -139,6 +141,15 @@
     }
     .customer-amount .last-date {
       font-size: 11px; color: #8e8e93; margin-top: 4px;
+    }
+    .btn-delete-customer {
+      padding: 6px 12px; background: #fff5f5; color: #ff3b30;
+      border: 1px solid #ffd5d5; border-radius: 8px;
+      font-size: 12px; cursor: pointer; font-family: inherit;
+      white-space: nowrap;
+    }
+    .btn-delete-customer:hover {
+      background: #ff3b30; color: white; border-color: #ff3b30;
     }
 
     .empty-state {
@@ -359,20 +370,52 @@
         if (c.pickedUp.count > 0) badges.push(`<span class="cust-badge paid">📦 픽업 ${c.pickedUp.count}건</span>`);
 
         return `
-          <div class="customer-card ${cardClass}" onclick="showCustomerPopup('${escapeAttr(c.phone)}', loadCustomers)">
-            <div>
+          <div class="customer-card ${cardClass}">
+            <div onclick="showCustomerPopup('${escapeAttr(c.phone)}', loadCustomers)" style="cursor:pointer;">
               <div class="customer-name">${escapeHtml(c.name || '(이름 없음)')}</div>
               <div class="customer-phone">📞 ${escapeHtml(c.phone)}</div>
               <div class="customer-badges">${badges.join('')}</div>
             </div>
             <div class="customer-amount">
-              <div class="total">${fmtUSD(c.totalAmount)}</div>
-              ${hasUnpaid ? `<div class="outstanding">미결제 ${fmtUSD(c.unpaid.amount)}</div>` : ''}
-              ${lastDate ? `<div class="last-date">최근 ${lastDate}</div>` : ''}
+              <div onclick="showCustomerPopup('${escapeAttr(c.phone)}', loadCustomers)" style="cursor:pointer;">
+                <div class="total">${fmtUSD(c.totalAmount)}</div>
+                ${hasUnpaid ? `<div class="outstanding">미결제 ${fmtUSD(c.unpaid.amount)}</div>` : ''}
+                ${lastDate ? `<div class="last-date">최근 ${lastDate}</div>` : ''}
+              </div>
+              <button class="btn-delete-customer"
+                      onclick="deleteCustomer('${escapeAttr(c.phone)}', '${escapeAttr(c.name)}', ${c.totalCount}); event.stopPropagation();"
+                      title="이 고객의 모든 데이터 삭제">
+                🗑️ 삭제
+              </button>
             </div>
           </div>
         `;
       }).join('');
+    }
+
+    /* ─── 고객 데이터 삭제 ─── */
+    async function deleteCustomer(phone, name, totalCount) {
+      if (!confirm(
+        `⚠️ "${name}" 님의 모든 데이터를 삭제하시겠어요?\n\n` +
+        `📞 ${phone}\n` +
+        `📊 거래 ${totalCount}건 (외상 + 선주문 포함)\n\n` +
+        `예약중 선주문은 재고가 자동 복원됩니다.\n` +
+        `이 작업은 되돌릴 수 없습니다.`
+      )) return;
+
+      try {
+        const res = await api('deleteCustomerData', { phone: phone });
+        if (res.success) {
+          const d = res.details || {};
+          const restored = d.restoredProducts > 0 ? ` (재고 ${d.restoredProducts}건 복원)` : '';
+          showToast(`🗑️ ${name} 데이터 삭제됨${restored}`, 'success');
+          loadCustomers();
+        } else {
+          showToast(res.message || '삭제 실패', 'error');
+        }
+      } catch (err) {
+        showToast('오류: ' + err.message, 'error');
+      }
     }
   </script>
 </body>
