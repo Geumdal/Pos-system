@@ -25,6 +25,8 @@ const SHEET_PRODUCTS    = 'Products';
 const SHEET_SALES       = 'Sales';
 const SHEET_SALE_ITEMS  = 'SaleItems';
 const SHEET_OUTSTANDING = 'Outstanding';   // 외상 추적
+const SHEET_PREORDERS   = 'Preorders';     // 선주문 헤더
+const SHEET_PREORDER_ITEMS = 'PreorderItems'; // 선주문 항목
 
 function _checkSheetId() {
   if (!SHEET_ID || SHEET_ID === 'YOUR_GOOGLE_SHEET_ID_HERE') {
@@ -78,6 +80,13 @@ const API_FUNCTIONS = {
   getOutstandingList:    (p) => getOutstandingList(p),
   payOutstanding:        (p) => payOutstanding(p.saleId, p.method),
   getOutstandingDetail:  (p) => getOutstandingDetail(p.saleId),
+  // 선주문 관리
+  createPreorder:        (p) => createPreorder(p),
+  getPreorderList:       (p) => getPreorderList(p),
+  getPreorderDetail:     (p) => getPreorderDetail(p.preorderId),
+  pickupPreorder:        (p) => pickupPreorder(p),
+  cancelPreorder:        (p) => cancelPreorder(p.preorderId),
+  updatePreorder:        (p) => updatePreorder(p),
   // 메타
   ping:                  () => ({ success: true, time: new Date().toISOString(), version: 'api-v1' })
 };
@@ -1937,5 +1946,734 @@ function fillEmptyCategories(confirmCode) {
     };
   } finally {
     lock.releaseLock();
+  }
+}
+
+
+/* ═════════════════════════════════════════════
+ * 선주문(Preorder) 시스템
+ * ═════════════════════════════════════════════ */
+
+/* 선주문 시트가 없으면 생성 */
+function _ensurePreorderSheets(ss) {
+  let preordersSheet = ss.getSheetByName(SHEET_PREORDERS);
+  if (!preordersSheet) {
+    preordersSheet = ss.insertSheet(SHEET_PREORDERS);
+    preordersSheet.getRange(1, 1, 1, 11).setValues([
+      ['예약번호', '예약일시', '고객명', '연락처', '카톡ID', '상태', '픽업예정일', '픽업일시', '결제거래번호', '총액', '메모']
+    ]);
+    preordersSheet.getRange(1, 1, 1, 11)
+      .setFontWeight('bold').setBackground('#5856d6').setFontColor('#ffffff');
+    preordersSheet.setColumnWidth(1, 180);
+    preordersSheet.setColumnWidth(2, 160);
+    preordersSheet.setColumnWidth(3, 120);
+    preordersSheet.setColumnWidth(4, 130);
+    preordersSheet.setColumnWidth(7, 120);
+    preordersSheet.setColumnWidth(8, 160);
+  }
+
+  let itemsSheet = ss.getSheetByName(SHEET_PREORDER_ITEMS);
+  if (!itemsSheet) {
+    itemsSheet = ss.insertSheet(SHEET_PREORDER_ITEMS);
+    itemsSheet.getRange(1, 1, 1, 6).setValues([
+      ['예약번호', '제품ID', '제품명', '수량', '단가', '합계']
+    ]);
+    itemsSheet.getRange(1, 1, 1, 6)
+      .setFontWeight('bold').setBackground('#5856d6').setFontColor('#ffffff');
+    itemsSheet.setColumnWidth(1, 180);
+    itemsSheet.setColumnWidth(3, 200);
+  }
+
+  return { preordersSheet, itemsSheet };
+}
+
+
+/* ─────────────────────────────────────────────
+ * 선주문 등록
+ *
+ * params: {
+ *   customerName, customerPhone, kakaoId, pickupDate, note,
+ *   items: [{id, qty}, ...]
+ * }
+ * ───────────────────────────────────────────── */
+function createPreorder(params) {
+  if (!params || !params.items || params.items.length === 0) {
+    return { success: false, message: '예약 항목이 없습니다.' };
+  }
+  if (!params.customerName) {
+    return { success: false, message: '고객명은 필수입니다.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const productsSheet = ss.getSheetByName(SHEET_PRODUCTS);
+    const { preordersSheet, itemsSheet } = _ensurePreorderSheets(ss);
+
+    const data = productsSheet.getDataRange().getValues();
+    const indexMap = {};
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0]) indexMap[String(data[i][0]).trim()] = i;
+    }
+
+    // 1단계: 모든 항목 검증 (재고 충분한지)
+    const validated = [];
+    let totalAmount = 0;
+
+    for (const item of params.items) {
+      const cleanId = String(item.id).trim();
+      const rowIdx = indexMap[cleanId];
+      if (rowIdx === undefined) {
+        return { success: false, message: `제품을 찾을 수 없음: ${cleanId}` };
+      }
+
+      const name = String(data[rowIdx][1]);
+      const price = Number(data[rowIdx][3]) || 0;
+      const currentStock = Number(data[rowIdx][4]) || 0;
+      const qty = Number(item.qty) || 0;
+
+      if (qty <= 0) {
+        return { success: false, message: `${name}의 수량이 잘못됨` };
+      }
+      if (currentStock < qty) {
+        return {
+          success: false,
+          message: `${name} 재고 부족 (현재 ${currentStock}, 예약요청 ${qty})`
+        };
+      }
+
+      const subtotal = price * qty;
+      validated.push({
+        id: cleanId, name, price, qty, subtotal,
+        rowIdx, newStock: currentStock - qty
+      });
+      totalAmount += subtotal;
+    }
+
+    // 2단계: 재고 차감 (예약 시점에 즉시 차감)
+    for (const v of validated) {
+      productsSheet.getRange(v.rowIdx + 1, 5).setValue(v.newStock);
+    }
+
+    // 3단계: 예약번호 생성
+    const now = new Date();
+    const ts = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyyMMddHHmmss');
+    const rand = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const preorderId = `PO-${ts}-${rand}`;
+
+    // 4단계: Preorders 시트 기록
+    preordersSheet.appendRow([
+      preorderId,
+      now,
+      String(params.customerName).trim(),
+      String(params.customerPhone || '').trim(),
+      String(params.kakaoId || '').trim(),
+      '예약중',
+      params.pickupDate ? String(params.pickupDate) : '',
+      '',                  // 픽업일시 (픽업 시 채움)
+      '',                  // 결제거래번호 (픽업 시 채움)
+      totalAmount,
+      String(params.note || '').trim()
+    ]);
+
+    // 5단계: PreorderItems 시트 기록
+    const itemRows = validated.map(v => [preorderId, v.id, v.name, v.qty, v.price, v.subtotal]);
+    itemsSheet.getRange(itemsSheet.getLastRow() + 1, 1, itemRows.length, 6)
+      .setValues(itemRows);
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: '선주문 등록 완료',
+      preorder: {
+        preorderId,
+        customerName: params.customerName,
+        totalAmount,
+        itemCount: validated.length,
+        items: validated.map(v => ({
+          id: v.id, name: v.name, qty: v.qty, price: v.price, subtotal: v.subtotal
+        }))
+      }
+    };
+  } catch (err) {
+    return { success: false, message: '예약 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+ * 선주문 목록 조회
+ *
+ * filter: { status: 'all'|'pending'|'completed'|'cancelled' }
+ * ───────────────────────────────────────────── */
+function getPreorderList(filter) {
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const { preordersSheet, itemsSheet } = _ensurePreorderSheets(ss);
+
+    const data = preordersSheet.getDataRange().getValues();
+    const itemsData = itemsSheet.getDataRange().getValues();
+
+    // 항목들을 예약번호별로 그룹화
+    const itemsByPreorder = {};
+    for (let i = 1; i < itemsData.length; i++) {
+      const poId = String(itemsData[i][0] || '').trim();
+      if (!poId) continue;
+      if (!itemsByPreorder[poId]) itemsByPreorder[poId] = [];
+      itemsByPreorder[poId].push({
+        id:       String(itemsData[i][1]),
+        name:     String(itemsData[i][2]),
+        qty:      Number(itemsData[i][3]) || 0,
+        price:    Number(itemsData[i][4]) || 0,
+        subtotal: Number(itemsData[i][5]) || 0
+      });
+    }
+
+    const filterStatus = filter && filter.status ? String(filter.status) : 'all';
+    const items = [];
+    let totalPending = 0;
+    let totalCompleted = 0;
+    let pendingAmount = 0;
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (!row[0]) continue;
+
+      const status = String(row[5] || '').trim();
+      const poId = String(row[0]);
+      const item = {
+        preorderId:   poId,
+        timestamp:    row[1] instanceof Date ? row[1].toISOString() : String(row[1]),
+        customerName: String(row[2] || ''),
+        customerPhone: String(row[3] || ''),
+        kakaoId:      String(row[4] || ''),
+        status:       status,
+        pickupDate:   String(row[6] || ''),
+        pickupAt:     row[7] instanceof Date ? row[7].toISOString() : (row[7] ? String(row[7]) : ''),
+        saleId:       String(row[8] || ''),
+        totalAmount:  Number(row[9]) || 0,
+        note:         String(row[10] || ''),
+        items:        itemsByPreorder[poId] || [],
+        rowIndex:     i + 1
+      };
+
+      if (status === '예약중') {
+        totalPending++;
+        pendingAmount += item.totalAmount;
+      }
+      if (status === '픽업완료') totalCompleted++;
+
+      // 필터 적용
+      if (filterStatus === 'all' ||
+          (filterStatus === 'pending' && status === '예약중') ||
+          (filterStatus === 'completed' && status === '픽업완료') ||
+          (filterStatus === 'cancelled' && status === '취소')) {
+        items.push(item);
+      }
+    }
+
+    // 예약중이 위에, 그 다음 최신 순
+    items.sort((a, b) => {
+      if (a.status !== b.status) {
+        if (a.status === '예약중') return -1;
+        if (b.status === '예약중') return 1;
+      }
+      return b.timestamp.localeCompare(a.timestamp);
+    });
+
+    return {
+      success: true,
+      items: items,
+      summary: {
+        totalCount:     items.length,
+        pendingCount:   totalPending,
+        completedCount: totalCompleted,
+        pendingAmount:  pendingAmount
+      }
+    };
+  } catch (err) {
+    return { success: false, message: '선주문 조회 실패: ' + err.message };
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+ * 선주문 픽업 처리 (결제까지 한번에)
+ *
+ * params: {
+ *   preorderId,
+ *   payment: { method, tendered, customerName?, customerPhone?, note? }
+ * }
+ * ───────────────────────────────────────────── */
+function pickupPreorder(params) {
+  if (!params || !params.preorderId) {
+    return { success: false, message: '예약번호가 필요합니다.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const { preordersSheet, itemsSheet } = _ensurePreorderSheets(ss);
+
+    // 1단계: 예약 정보 조회
+    const data = preordersSheet.getDataRange().getValues();
+    let foundRow = -1;
+    let preorderInfo = null;
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(params.preorderId).trim()) {
+        foundRow = i + 1;
+        preorderInfo = {
+          status:        String(data[i][5] || '').trim(),
+          customerName:  String(data[i][2] || ''),
+          customerPhone: String(data[i][3] || ''),
+          totalAmount:   Number(data[i][9]) || 0,
+          note:          String(data[i][10] || '')
+        };
+        break;
+      }
+    }
+
+    if (foundRow < 0) {
+      return { success: false, message: '예약을 찾을 수 없습니다.' };
+    }
+    if (preorderInfo.status === '픽업완료') {
+      return { success: false, message: '이미 픽업 완료된 예약입니다.' };
+    }
+    if (preorderInfo.status === '취소') {
+      return { success: false, message: '취소된 예약입니다.' };
+    }
+
+    // 2단계: 예약 항목 조회
+    const itemsData = itemsSheet.getDataRange().getValues();
+    const items = [];
+    for (let i = 1; i < itemsData.length; i++) {
+      if (String(itemsData[i][0]).trim() === String(params.preorderId).trim()) {
+        items.push({
+          id:       String(itemsData[i][1]),
+          name:     String(itemsData[i][2]),
+          qty:      Number(itemsData[i][3]) || 0,
+          price:    Number(itemsData[i][4]) || 0,
+          subtotal: Number(itemsData[i][5]) || 0
+        });
+      }
+    }
+
+    if (items.length === 0) {
+      return { success: false, message: '예약 항목이 없습니다.' };
+    }
+
+    // 3단계: 결제 처리 (재고는 이미 예약 시점에 차감됨)
+    // → 일반 processSale을 거치지 않고 직접 Sales 시트에 기록
+    let salesSheet = ss.getSheetByName(SHEET_SALES);
+    let saleItemsSheet = ss.getSheetByName(SHEET_SALE_ITEMS);
+    if (!salesSheet || !saleItemsSheet) {
+      _ensureSalesSheets(ss);
+      salesSheet = ss.getSheetByName(SHEET_SALES);
+      saleItemsSheet = ss.getSheetByName(SHEET_SALE_ITEMS);
+    }
+    _ensureSalesExtendedColumns(salesSheet);
+
+    const totalAmount = items.reduce((s, i) => s + i.subtotal, 0);
+    const totalQty = items.reduce((s, i) => s + i.qty, 0);
+
+    const payment = params.payment || {};
+    const rawMethod = payment.method ? String(payment.method) : '현금';
+    let method;
+    if (rawMethod === 'Venmo' || rawMethod === 'venmo') method = 'Venmo';
+    else if (rawMethod === '외상' || rawMethod === 'credit') method = '외상';
+    else method = '현금';
+
+    const tendered = Number(payment.tendered) || (method === '외상' ? 0 : totalAmount);
+    const change = method === '현금' ? Math.max(0, tendered - totalAmount) : 0;
+
+    if (method !== '외상' && tendered < totalAmount) {
+      return {
+        success: false,
+        message: `받은 금액 부족 (총액 $${totalAmount.toFixed(2)}, 받음 $${tendered.toFixed(2)})`
+      };
+    }
+
+    // 4단계: 거래번호 생성
+    const now = new Date();
+    const ts = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyyMMddHHmmss');
+    const rand = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const saleId = `T-${ts}-${rand}`;
+
+    const note = `[선주문 ${params.preorderId} 픽업] ${(payment.note || preorderInfo.note || '')}`.trim();
+    const status = method === '외상' ? '외상' : '완료';
+
+    // 5단계: Sales 기록
+    salesSheet.appendRow([
+      saleId, now, items.length, totalQty,
+      totalAmount, method, tendered, change, status,
+      note, preorderInfo.customerName, preorderInfo.customerPhone
+    ]);
+
+    // 6단계: SaleItems 기록
+    const itemRows = items.map(i => [saleId, i.id, i.name, i.price, i.qty, i.subtotal]);
+    saleItemsSheet.getRange(saleItemsSheet.getLastRow() + 1, 1, itemRows.length, 6)
+      .setValues(itemRows);
+
+    // 7단계: 외상이면 Outstanding 시트에도 기록
+    if (method === '외상') {
+      const outstandingSheet = _ensureOutstandingSheet(ss);
+      outstandingSheet.appendRow([
+        saleId, now, preorderInfo.customerName, preorderInfo.customerPhone,
+        totalAmount, '미결제', '', '', note
+      ]);
+    }
+
+    // 8단계: Preorders 상태 업데이트
+    preordersSheet.getRange(foundRow, 6).setValue('픽업완료');
+    preordersSheet.getRange(foundRow, 8).setValue(now);
+    preordersSheet.getRange(foundRow, 9).setValue(saleId);
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: '픽업 완료',
+      receipt: {
+        preorderId: params.preorderId,
+        saleId,
+        timestamp: now.toISOString(),
+        items,
+        itemCount: items.length,
+        totalQty,
+        totalAmount,
+        method,
+        tendered,
+        change,
+        status,
+        customerName: preorderInfo.customerName,
+        customerPhone: preorderInfo.customerPhone,
+        note
+      }
+    };
+  } catch (err) {
+    return { success: false, message: '픽업 처리 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+ * 선주문 취소 (재고 복원)
+ * ───────────────────────────────────────────── */
+function cancelPreorder(preorderId) {
+  if (!preorderId) {
+    return { success: false, message: '예약번호가 필요합니다.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const productsSheet = ss.getSheetByName(SHEET_PRODUCTS);
+    const { preordersSheet, itemsSheet } = _ensurePreorderSheets(ss);
+
+    // 예약 찾기
+    const data = preordersSheet.getDataRange().getValues();
+    let foundRow = -1;
+    let currentStatus = '';
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(preorderId).trim()) {
+        foundRow = i + 1;
+        currentStatus = String(data[i][5] || '').trim();
+        break;
+      }
+    }
+
+    if (foundRow < 0) {
+      return { success: false, message: '예약을 찾을 수 없습니다.' };
+    }
+    if (currentStatus === '픽업완료') {
+      return { success: false, message: '이미 픽업 완료된 예약은 취소할 수 없습니다.' };
+    }
+    if (currentStatus === '취소') {
+      return { success: false, message: '이미 취소된 예약입니다.' };
+    }
+
+    // 항목 조회
+    const itemsData = itemsSheet.getDataRange().getValues();
+    const items = [];
+    for (let i = 1; i < itemsData.length; i++) {
+      if (String(itemsData[i][0]).trim() === String(preorderId).trim()) {
+        items.push({
+          id:  String(itemsData[i][1]),
+          qty: Number(itemsData[i][3]) || 0
+        });
+      }
+    }
+
+    // 제품 인덱스
+    const productData = productsSheet.getDataRange().getValues();
+    const indexMap = {};
+    for (let i = 1; i < productData.length; i++) {
+      if (productData[i][0]) indexMap[String(productData[i][0]).trim()] = i;
+    }
+
+    // 재고 복원
+    let restoredCount = 0;
+    for (const item of items) {
+      const rowIdx = indexMap[item.id];
+      if (rowIdx === undefined) continue;
+      const currentStock = Number(productData[rowIdx][4]) || 0;
+      productsSheet.getRange(rowIdx + 1, 5).setValue(currentStock + item.qty);
+      restoredCount++;
+    }
+
+    // 상태 변경
+    preordersSheet.getRange(foundRow, 6).setValue('취소');
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: '예약 취소 완료',
+      preorderId,
+      restoredItems: restoredCount
+    };
+  } catch (err) {
+    return { success: false, message: '취소 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+ * 선주문 수정 (수량 변경 / 항목 추가)
+ *
+ * params: {
+ *   preorderId,
+ *   items: [{id, qty}, ...]   // 새로운 전체 항목 (기존 대체)
+ *   customerName, customerPhone, kakaoId, pickupDate, note (선택)
+ * }
+ * ───────────────────────────────────────────── */
+function updatePreorder(params) {
+  if (!params || !params.preorderId) {
+    return { success: false, message: '예약번호가 필요합니다.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const productsSheet = ss.getSheetByName(SHEET_PRODUCTS);
+    const { preordersSheet, itemsSheet } = _ensurePreorderSheets(ss);
+
+    // 예약 찾기
+    const data = preordersSheet.getDataRange().getValues();
+    let foundRow = -1;
+    let currentStatus = '';
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(params.preorderId).trim()) {
+        foundRow = i + 1;
+        currentStatus = String(data[i][5] || '').trim();
+        break;
+      }
+    }
+
+    if (foundRow < 0) {
+      return { success: false, message: '예약을 찾을 수 없습니다.' };
+    }
+    if (currentStatus !== '예약중') {
+      return { success: false, message: '예약중 상태에서만 수정 가능합니다.' };
+    }
+
+    const productData = productsSheet.getDataRange().getValues();
+    const indexMap = {};
+    for (let i = 1; i < productData.length; i++) {
+      if (productData[i][0]) indexMap[String(productData[i][0]).trim()] = i;
+    }
+
+    // 1단계: 기존 항목 (재고 복원용)
+    const itemsData = itemsSheet.getDataRange().getValues();
+    const oldItems = [];
+    const oldRowIndices = [];
+    for (let i = 1; i < itemsData.length; i++) {
+      if (String(itemsData[i][0]).trim() === String(params.preorderId).trim()) {
+        oldItems.push({
+          id:  String(itemsData[i][1]),
+          qty: Number(itemsData[i][3]) || 0
+        });
+        oldRowIndices.push(i + 1);
+      }
+    }
+
+    // 2단계: 기존 재고 임시 복원 (검증을 위해)
+    for (const item of oldItems) {
+      const rowIdx = indexMap[item.id];
+      if (rowIdx === undefined) continue;
+      const currentStock = Number(productData[rowIdx][4]) || 0;
+      productData[rowIdx][4] = currentStock + item.qty;  // 메모리상 임시 복원
+    }
+
+    // 3단계: 새 항목 검증
+    if (params.items) {
+      const validated = [];
+      let totalAmount = 0;
+
+      for (const item of params.items) {
+        const cleanId = String(item.id).trim();
+        const rowIdx = indexMap[cleanId];
+        if (rowIdx === undefined) {
+          return { success: false, message: `제품을 찾을 수 없음: ${cleanId}` };
+        }
+
+        const name = String(productData[rowIdx][1]);
+        const price = Number(productData[rowIdx][3]) || 0;
+        const availableStock = Number(productData[rowIdx][4]) || 0;
+        const qty = Number(item.qty) || 0;
+
+        if (qty <= 0) continue;
+        if (availableStock < qty) {
+          return {
+            success: false,
+            message: `${name} 재고 부족 (사용가능 ${availableStock}, 요청 ${qty})`
+          };
+        }
+
+        const subtotal = price * qty;
+        validated.push({
+          id: cleanId, name, price, qty, subtotal,
+          rowIdx, newStock: availableStock - qty
+        });
+        totalAmount += subtotal;
+
+        // 메모리상 차감
+        productData[rowIdx][4] = availableStock - qty;
+      }
+
+      if (validated.length === 0) {
+        return { success: false, message: '예약 항목이 없습니다.' };
+      }
+
+      // 4단계: 실제 재고 업데이트 (한번에)
+      // 먼저 기존 재고 복원
+      for (const oldItem of oldItems) {
+        const rowIdx = indexMap[oldItem.id];
+        if (rowIdx === undefined) continue;
+        const realStock = Number(productsSheet.getRange(rowIdx + 1, 5).getValue()) || 0;
+        productsSheet.getRange(rowIdx + 1, 5).setValue(realStock + oldItem.qty);
+      }
+      // 다음 새 항목 차감
+      for (const v of validated) {
+        const realStock = Number(productsSheet.getRange(v.rowIdx + 1, 5).getValue()) || 0;
+        productsSheet.getRange(v.rowIdx + 1, 5).setValue(realStock - v.qty);
+      }
+
+      // 5단계: PreorderItems 시트에서 기존 항목 삭제 + 새로 추가
+      // 뒤에서부터 삭제 (인덱스 어긋남 방지)
+      oldRowIndices.sort((a, b) => b - a).forEach(rowIdx => {
+        itemsSheet.deleteRow(rowIdx);
+      });
+
+      const itemRows = validated.map(v => [params.preorderId, v.id, v.name, v.qty, v.price, v.subtotal]);
+      itemsSheet.getRange(itemsSheet.getLastRow() + 1, 1, itemRows.length, 6)
+        .setValues(itemRows);
+
+      // 6단계: Preorders 시트의 총액 업데이트
+      preordersSheet.getRange(foundRow, 10).setValue(totalAmount);
+    }
+
+    // 7단계: 헤더 정보 업데이트 (선택적)
+    if (params.customerName) preordersSheet.getRange(foundRow, 3).setValue(String(params.customerName).trim());
+    if (params.customerPhone !== undefined) preordersSheet.getRange(foundRow, 4).setValue(String(params.customerPhone || '').trim());
+    if (params.kakaoId !== undefined) preordersSheet.getRange(foundRow, 5).setValue(String(params.kakaoId || '').trim());
+    if (params.pickupDate !== undefined) preordersSheet.getRange(foundRow, 7).setValue(String(params.pickupDate || ''));
+    if (params.note !== undefined) preordersSheet.getRange(foundRow, 11).setValue(String(params.note || '').trim());
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: '예약 수정 완료',
+      preorderId: params.preorderId
+    };
+  } catch (err) {
+    return { success: false, message: '수정 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/* ─────────────────────────────────────────────
+ * 선주문 단일 조회 (상세)
+ * ───────────────────────────────────────────── */
+function getPreorderDetail(preorderId) {
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const { preordersSheet, itemsSheet } = _ensurePreorderSheets(ss);
+
+    const data = preordersSheet.getDataRange().getValues();
+    let info = null;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(preorderId).trim()) {
+        info = {
+          preorderId:    String(data[i][0]),
+          timestamp:     data[i][1] instanceof Date ? data[i][1].toISOString() : String(data[i][1]),
+          customerName:  String(data[i][2] || ''),
+          customerPhone: String(data[i][3] || ''),
+          kakaoId:       String(data[i][4] || ''),
+          status:        String(data[i][5] || ''),
+          pickupDate:    String(data[i][6] || ''),
+          pickupAt:      data[i][7] instanceof Date ? data[i][7].toISOString() : (data[i][7] ? String(data[i][7]) : ''),
+          saleId:        String(data[i][8] || ''),
+          totalAmount:   Number(data[i][9]) || 0,
+          note:          String(data[i][10] || '')
+        };
+        break;
+      }
+    }
+
+    if (!info) return { success: false, message: '예약을 찾을 수 없습니다.' };
+
+    const itemsData = itemsSheet.getDataRange().getValues();
+    const items = [];
+    for (let i = 1; i < itemsData.length; i++) {
+      if (String(itemsData[i][0]).trim() === String(preorderId).trim()) {
+        items.push({
+          id:       String(itemsData[i][1]),
+          name:     String(itemsData[i][2]),
+          qty:      Number(itemsData[i][3]) || 0,
+          price:    Number(itemsData[i][4]) || 0,
+          subtotal: Number(itemsData[i][5]) || 0
+        });
+      }
+    }
+
+    return { success: true, preorder: info, items };
+  } catch (err) {
+    return { success: false, message: '조회 실패: ' + err.message };
   }
 }
