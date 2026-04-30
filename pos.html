@@ -541,7 +541,7 @@
       }
       header .menu {
         display: grid;                            /* 그리드로 균등 분배 */
-        grid-template-columns: repeat(5, 1fr);    /* 5개 메뉴 균등 */
+        grid-template-columns: repeat(6, 1fr);    /* 5개 메뉴 균등 */
         gap: 4px;
         width: 100%;
       }
@@ -724,6 +724,7 @@
         <a class="header-btn" href="admin.html"><span class="hb-icon">📋</span><span class="hb-label">제품관리</span></a>
         <a class="header-btn" href="qr.html"><span class="hb-icon">🏷️</span><span class="hb-label">QR생성</span></a>
         <a class="header-btn" href="stats.html"><span class="hb-icon">📊</span><span class="hb-label">판매통계</span></a>
+      <a class="header-btn" href="outstanding.html"><span class="hb-icon">📝</span><span class="hb-label">외상</span></a>
       </div>
     </header>
 
@@ -781,17 +782,43 @@
     <div class="modal">
       <h2>💳 결제</h2>
 
-      <div class="pay-method-row">
+      <div class="pay-method-row" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
         <button class="pay-method active" id="payCash"
-                onclick="selectMethod('현금')">💵 현금 (Cash)</button>
+                onclick="selectMethod('현금')">💵 현금</button>
         <button class="pay-method" id="payVenmo"
                 onclick="selectMethod('Venmo')">💸 Venmo</button>
+        <button class="pay-method" id="payCredit"
+                onclick="selectMethod('외상')" style="background:#fff5f5; color:#c62828; border-color:#ffd5d5;">📝 외상</button>
       </div>
 
       <div id="venmoBox" style="display:none; background:linear-gradient(135deg,#3D95CE,#2a7ab0); color:white; padding:14px 16px; border-radius:12px; margin-bottom:14px; text-align:center;">
         <div style="font-size:11px; opacity:0.85; letter-spacing:0.5px;">VENMO로 송금</div>
         <div style="font-size:22px; font-weight:700; margin-top:4px; letter-spacing:0.5px;">@Garden-Church</div>
         <div style="font-size:11px; opacity:0.85; margin-top:4px;">금액 확인 후 직접 송금받으세요</div>
+      </div>
+
+      <div id="creditBox" style="display:none; background:#fff5f5; border:1px solid #ffd5d5; padding:12px 14px; border-radius:10px; margin-bottom:14px;">
+        <div style="font-size:13px; font-weight:600; color:#c62828; margin-bottom:8px;">📝 외상 거래</div>
+        <div style="font-size:12px; color:#8a3a3a; line-height:1.5; margin-bottom:8px;">
+          나중에 결제하실 분의 정보를 입력해주세요. 외상 목록에서 추후 결제 처리 가능합니다.
+        </div>
+      </div>
+
+      <!-- 고객정보 + 메모 (외상이거나 메모가 필요한 경우) -->
+      <div id="customerInfoSection" style="margin-bottom:14px;">
+        <details id="customerDetails" style="background:#f5f5f7; border-radius:10px; padding:10px 14px;">
+          <summary style="cursor:pointer; font-size:13px; font-weight:600; color:#1d1d1f;">
+            👤 고객 정보 / 메모 추가 <span id="creditRequired" style="color:#ff3b30; display:none;">(외상 시 필수)</span>
+          </summary>
+          <div style="margin-top:10px; display:grid; gap:8px;">
+            <input type="text" id="customerName" placeholder="고객명 (예: 김영희)" maxlength="40"
+                   style="padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:14px; font-family:inherit;">
+            <input type="text" id="customerPhone" placeholder="연락처 (예: 703-555-1234)" maxlength="30"
+                   style="padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:14px; font-family:inherit;">
+            <input type="text" id="saleNote" placeholder="메모 (예: 친구 김OO 위해 결제, 배달 주소 등)" maxlength="200"
+                   style="padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:14px; font-family:inherit;">
+          </div>
+        </details>
       </div>
 
       <div class="pay-amount-box">
@@ -1205,6 +1232,13 @@
       document.getElementById('payTotalBig').textContent = fmtUSD(total);
       document.getElementById('tenderedInput').value     = '';
       document.getElementById('venmoBox').style.display = 'none';
+      document.getElementById('creditBox').style.display = 'none';
+      // 고객 정보 초기화
+      document.getElementById('customerName').value = '';
+      document.getElementById('customerPhone').value = '';
+      document.getElementById('saleNote').value = '';
+      document.getElementById('customerDetails').open = false;
+      document.getElementById('creditRequired').style.display = 'none';
       calcChange();
       payMethod = '현금';
       updateMethodButtons();
@@ -1216,19 +1250,41 @@
     function selectMethod(m) {
       payMethod = m;
       updateMethodButtons();
-      // 현금/Venmo 둘 다 받은 금액 입력 가능 (Venmo는 보통 정확히 지불)
-      document.getElementById('cashSection').style.display = 'block';
-      // Venmo ID 박스는 Venmo 선택 시에만
-      document.getElementById('venmoBox').style.display = m === 'Venmo' ? 'block' : 'none';
-      // Venmo로 변경 시 자동으로 정확한 금액 채워줌
-      if (m === 'Venmo') {
-        setExact();
+
+      // 외상 모드
+      if (m === '외상') {
+        document.getElementById('cashSection').style.display = 'none';
+        document.getElementById('venmoBox').style.display = 'none';
+        document.getElementById('creditBox').style.display = 'block';
+        document.getElementById('customerDetails').open = true;
+        document.getElementById('creditRequired').style.display = 'inline';
+        document.getElementById('customerName').focus();
+      } else {
+        // 현금/Venmo
+        document.getElementById('cashSection').style.display = 'block';
+        document.getElementById('creditBox').style.display = 'none';
+        document.getElementById('venmoBox').style.display = m === 'Venmo' ? 'block' : 'none';
+        document.getElementById('creditRequired').style.display = 'none';
+        if (m === 'Venmo') setExact();
       }
       calcChange();
     }
     function updateMethodButtons() {
       document.getElementById('payCash').classList.toggle('active', payMethod === '현금');
       document.getElementById('payVenmo').classList.toggle('active', payMethod === 'Venmo');
+      document.getElementById('payCredit').classList.toggle('active', payMethod === '외상');
+
+      // 외상 active 시 빨강 강조
+      const creditBtn = document.getElementById('payCredit');
+      if (payMethod === '외상') {
+        creditBtn.style.background = '#ff3b30';
+        creditBtn.style.color = 'white';
+        creditBtn.style.borderColor = '#ff3b30';
+      } else {
+        creditBtn.style.background = '#fff5f5';
+        creditBtn.style.color = '#c62828';
+        creditBtn.style.borderColor = '#ffd5d5';
+      }
     }
     function setExact() {
       const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
@@ -1246,6 +1302,15 @@
     }
     function calcChange() {
       const total    = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      const btn = document.getElementById('confirmBtn');
+
+      // 외상 모드는 고객명만 있으면 결제 가능
+      if (payMethod === '외상') {
+        const name = document.getElementById('customerName').value.trim();
+        btn.disabled = !name;
+        return;
+      }
+
       const tendered = Number(document.getElementById('tenderedInput').value) || 0;
       const change   = tendered - total;
       const el = document.getElementById('changeAmount');
@@ -1253,16 +1318,37 @@
         ? fmtUSD(change)
         : `부족 ${fmtUSD(Math.abs(change))}`;
       el.style.color = change >= 0 ? '#34c759' : '#ff3b30';
-      document.getElementById('confirmBtn').disabled = (tendered < total);
+      btn.disabled = (tendered < total);
     }
+
+    // 고객명 입력 시 외상 결제 버튼 활성화 체크
+    document.addEventListener('input', (e) => {
+      if (e.target && e.target.id === 'customerName' && payMethod === '외상') {
+        calcChange();
+      }
+    });
 
     function confirmPayment() {
       const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
-      const tendered = Number(document.getElementById('tenderedInput').value) || 0;
+      const customerName  = document.getElementById('customerName').value.trim();
+      const customerPhone = document.getElementById('customerPhone').value.trim();
+      const note          = document.getElementById('saleNote').value.trim();
 
-      if (tendered < total) {
-        showToast('받은 금액이 부족합니다', 'error');
-        return;
+      let tendered;
+      if (payMethod === '외상') {
+        if (!customerName) {
+          showToast('외상은 고객명이 필수입니다', 'error');
+          document.getElementById('customerDetails').open = true;
+          document.getElementById('customerName').focus();
+          return;
+        }
+        tendered = 0;
+      } else {
+        tendered = Number(document.getElementById('tenderedInput').value) || 0;
+        if (tendered < total) {
+          showToast('받은 금액이 부족합니다', 'error');
+          return;
+        }
       }
 
       const btn = document.getElementById('confirmBtn');
@@ -1270,13 +1356,22 @@
       btn.textContent = '처리 중...';
 
       const items = cart.map(c => ({ id: c.id, qty: c.qty }));
-      api('processSale', { items: items, payment: { method: payMethod, tendered: tendered } })
-        .then(res => { (onPaymentResult)(res); })
-        .catch(err => { (err => {
+      api('processSale', {
+        items: items,
+        payment: {
+          method: payMethod,
+          tendered: tendered,
+          customerName: customerName,
+          customerPhone: customerPhone,
+          note: note
+        }
+      })
+        .then(res => { onPaymentResult(res); })
+        .catch(err => {
           btn.disabled = false;
           btn.textContent = '결제 완료';
           showToast('오류: ' + (err.message || err), 'error');
-        })(err); });
+        });
     }
 
     function onPaymentResult(res) {
@@ -1300,12 +1395,31 @@
     function showReceipt(r) {
       const date = new Date(r.timestamp);
       const dateStr = date.toLocaleString('ko-KR');
+      const isCredit = r.method === '외상' || r.status === '외상';
+
+      const customerHtml = r.customerName ? `
+        <div style="background:#f5f5f7; padding:10px 12px; border-radius:8px; margin-bottom:10px; font-size:13px;">
+          <div><strong>고객:</strong> ${escapeHtml(r.customerName)}</div>
+          ${r.customerPhone ? `<div><strong>연락처:</strong> ${escapeHtml(r.customerPhone)}</div>` : ''}
+          ${r.note ? `<div><strong>메모:</strong> ${escapeHtml(r.note)}</div>` : ''}
+        </div>` : '';
+
+      const creditWarn = isCredit ? `
+        <div style="background:#fff5f5; border:2px solid #ff3b30; padding:12px; border-radius:10px; margin-bottom:10px; text-align:center;">
+          <div style="font-size:18px; font-weight:700; color:#ff3b30;">📝 외상 거래</div>
+          <div style="font-size:12px; color:#c62828; margin-top:4px;">
+            추후 결제 - 외상 관리 페이지에서 결제 처리하세요
+          </div>
+        </div>` : '';
+
       const html = `
         <div class="receipt">
           <div class="receipt-header">
             <div class="store">영수증</div>
             <div class="meta">${escapeHtml(r.saleId)}<br>${dateStr}</div>
           </div>
+          ${creditWarn}
+          ${customerHtml}
           <div class="receipt-items">
             ${r.items.map(it => `
               <div class="receipt-item">
@@ -1319,11 +1433,11 @@
             <div><span>항목수</span><span>${r.itemCount}</span></div>
             <div><span>총수량</span><span>${r.totalQty}</span></div>
             <div class="total"><span>총액</span><span>${fmtUSD(r.totalAmount)}</span></div>
-            <div><span>결제(${escapeHtml(r.method)})</span><span>${fmtUSD(r.tendered)}</span></div>
+            <div><span>결제(${escapeHtml(r.method)})</span><span>${isCredit ? '미결제' : fmtUSD(r.tendered)}</span></div>
             ${r.method === 'Venmo' ? `<div style="text-align:center;margin-top:6px;font-weight:600;color:#3D95CE;">Venmo: @Garden-Church</div>` : ''}
             ${r.change > 0 ? `<div><span>거스름돈</span><span>${fmtUSD(r.change)}</span></div>` : ''}
           </div>
-          <div class="receipt-footer">감사합니다</div>
+          <div class="receipt-footer">${isCredit ? '나중에 결제 부탁드려요' : '감사합니다'}</div>
         </div>
         <div class="modal-actions" style="margin-top:16px;">
           <button class="btn-cancel" onclick="window.print()">🖨️ 인쇄</button>

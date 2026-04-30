@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>가든교회 물품 판매 관리 시스템 - 외상 관리</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      overflow-x: hidden;
+      max-width: 100vw;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      padding: 0;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0; max-width: 100vw; }
+    .content { padding: 16px; max-width: 100%; }
+    button { font-family: inherit; cursor: pointer; }
+
+    header {
+      background: #1d1d1f; color: white;
+      padding: 0 16px;
+      height: 56px;
+      display: flex; justify-content: space-between; align-items: center;
+      margin: 0 0 16px 0;
+    }
+    header h1 {
+      font-size: 16px; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    header .menu, header .nav { display: flex; gap: 6px; align-items: center; }
+    .header-btn, .nav-btn {
+      background: rgba(255,255,255,0.12); color: white;
+      padding: 7px 13px; border: none; border-radius: 16px;
+      font-size: 13px; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+      white-space: nowrap;
+      cursor: pointer; font-family: inherit;
+    }
+    .header-btn:hover { background: rgba(255,255,255,0.2); }
+    .header-btn.active {
+      background: white; color: #1d1d1f; font-weight: 700;
+    }
+    .nav-btn.primary { background: #007aff; color: white; }
+
+    /* PC: 이모지 + 라벨 함께 */
+    .hb-icon { display: inline-block; margin-right: 4px; }
+    .hb-label { display: inline-block; font-size: 13px; }
+
+    .summary-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 12px; margin-bottom: 20px;
+    }
+    .summary-card {
+      background: white; padding: 16px; border-radius: 12px;
+      text-align: center;
+    }
+    .summary-card.unpaid { border-left: 4px solid #ff3b30; }
+    .summary-card.paid { border-left: 4px solid #34c759; }
+    .summary-card .v {
+      font-size: 24px; font-weight: 700; color: #1d1d1f;
+    }
+    .summary-card.unpaid .v { color: #ff3b30; }
+    .summary-card.paid .v { color: #34c759; }
+    .summary-card .l {
+      font-size: 12px; color: #8e8e93; margin-top: 4px;
+    }
+
+    .toolbar {
+      background: white; padding: 12px 16px;
+      border-radius: 12px; margin-bottom: 16px;
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    }
+    .toolbar .filter-tabs {
+      display: flex; gap: 4px; background: #f5f5f7; padding: 4px;
+      border-radius: 8px;
+    }
+    .filter-tab {
+      padding: 6px 14px; background: transparent; border: none;
+      border-radius: 6px; font-size: 13px; font-weight: 500;
+      color: #8e8e93; cursor: pointer;
+    }
+    .filter-tab.active {
+      background: white; color: #1d1d1f; font-weight: 700;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .toolbar input[type="text"] {
+      flex: 1; min-width: 180px; padding: 8px 12px;
+      border: 1px solid #e5e5ea; border-radius: 8px; font-size: 14px;
+      font-family: inherit;
+    }
+
+    .item-list {
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .item-card {
+      background: white; padding: 16px; border-radius: 12px;
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 14px; align-items: center;
+    }
+    .item-card.unpaid { border-left: 4px solid #ff3b30; }
+    .item-card.paid { border-left: 4px solid #34c759; opacity: 0.7; }
+
+    .item-info { min-width: 0; }
+    .item-customer {
+      font-size: 16px; font-weight: 700; color: #1d1d1f;
+      margin-bottom: 4px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .item-status {
+      display: inline-block; padding: 2px 10px; border-radius: 10px;
+      font-size: 11px; font-weight: 600;
+    }
+    .item-status.unpaid { background: #fff5f5; color: #ff3b30; }
+    .item-status.paid { background: #f0fdf4; color: #34c759; }
+    .item-meta {
+      font-size: 12px; color: #8e8e93; line-height: 1.6;
+    }
+    .item-amount {
+      font-size: 22px; font-weight: 700; color: #1d1d1f;
+      text-align: right; min-width: 100px;
+    }
+    .item-card.paid .item-amount { color: #8e8e93; text-decoration: line-through; }
+
+    .item-actions {
+      display: flex; gap: 6px; margin-top: 6px;
+    }
+    .btn-pay {
+      padding: 8px 14px; background: #34c759; color: white;
+      border: none; border-radius: 8px; font-size: 13px;
+      font-weight: 600; cursor: pointer;
+    }
+    .btn-pay:hover { background: #2ea043; }
+    .btn-detail {
+      padding: 8px 14px; background: #f5f5f7; color: #1d1d1f;
+      border: none; border-radius: 8px; font-size: 13px; cursor: pointer;
+    }
+
+    .empty-state {
+      text-align: center; padding: 60px 20px; color: #8e8e93;
+    }
+    .empty-state .ico { font-size: 48px; margin-bottom: 12px; }
+
+    /* 결제 모달 */
+    .modal-bd {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); z-index: 1000;
+      align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .modal-bd.active { display: flex; }
+    .modal {
+      background: white; border-radius: 16px; padding: 24px;
+      max-width: 480px; width: 100%; max-height: 90vh; overflow-y: auto;
+    }
+    .modal h2 { margin-bottom: 16px; font-size: 20px; }
+    .pay-method-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      margin-bottom: 14px;
+    }
+    .pay-method {
+      padding: 14px; background: #f5f5f7; color: #1d1d1f;
+      border: 2px solid transparent; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .pay-method.active { background: white; border-color: #007aff; color: #007aff; }
+    .modal-actions {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      margin-top: 16px;
+    }
+    .btn-cancel {
+      padding: 12px; background: #e5e5ea; color: #1d1d1f;
+      border: none; border-radius: 10px; font-weight: 600;
+    }
+    .btn-confirm {
+      padding: 12px; background: #34c759; color: white;
+      border: none; border-radius: 10px; font-weight: 600;
+    }
+    .btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .toast {
+      position: fixed; top: 24px; left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      padding: 12px 24px; border-radius: 10px; color: white;
+      font-size: 14px; font-weight: 600; z-index: 10000;
+      transition: transform 0.3s; pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.success { background: #34c759; }
+    .toast.error { background: #ff3b30; }
+
+    /* 푸터 */
+    .app-footer {
+      background: #1d1d1f;
+      color: rgba(255,255,255,0.5);
+      text-align: center;
+      padding: 16px 12px;
+      font-size: 12px;
+      margin-top: 24px;
+      line-height: 1.6;
+    }
+    .app-footer .footer-meta {
+      font-size: 10px;
+      color: rgba(255,255,255,0.3);
+      margin-top: 4px;
+    }
+
+    @media (max-width: 768px) {
+      header {
+        padding: 8px 12px;
+        flex-direction: column;
+        justify-content: center;
+        align-items: stretch;
+        gap: 6px;
+        height: auto;
+        min-height: 88px;
+      }
+      header h1 { font-size: 14px; text-align: center; justify-content: center; }
+      header .menu, header .nav {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 4px; width: 100%;
+      }
+      .header-btn, .nav-btn {
+        padding: 6px 4px; font-size: 11px; border-radius: 10px;
+        gap: 2px; min-width: 0; overflow: hidden; justify-content: center;
+      }
+      /* 모바일: 이모지 숨기고 라벨만 */
+      .hb-icon { display: none; }
+      .hb-label { display: inline-block; font-size: 10px; color: white; }
+      .header-btn.active .hb-label { color: #1d1d1f; }
+
+      .summary-grid {
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 6px;
+      }
+      .summary-card { padding: 10px; }
+      .summary-card .v { font-size: 18px; }
+      .summary-card .l { font-size: 10px; }
+
+      .item-card {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      .item-amount { text-align: left; }
+    }
+  </style>
+  <script src="config.js"></script>
+  <script src="assets/api.js"></script>
+</head>
+<body>
+
+  <header>
+    <h1>📝<span class="label"> 외상 관리</span></h1>
+    <div class="menu">
+      <a class="header-btn" href="pos.html"><span class="hb-icon">🛒</span><span class="hb-label">대시보드</span></a>
+      <a class="header-btn" href="stockin.html"><span class="hb-icon">📥</span><span class="hb-label">제품입고</span></a>
+      <a class="header-btn" href="admin.html"><span class="hb-icon">📋</span><span class="hb-label">제품관리</span></a>
+      <a class="header-btn" href="qr.html"><span class="hb-icon">🏷️</span><span class="hb-label">QR생성</span></a>
+      <a class="header-btn" href="stats.html"><span class="hb-icon">📊</span><span class="hb-label">판매통계</span></a>
+      <a class="header-btn active" href="outstanding.html"><span class="hb-icon">📝</span><span class="hb-label">외상</span></a>
+    </div>
+  </header>
+
+  <div class="content">
+    <div class="summary-grid">
+      <div class="summary-card unpaid">
+        <div class="v" id="sumUnpaidAmount">$0.00</div>
+        <div class="l">미결제 총액</div>
+      </div>
+      <div class="summary-card unpaid">
+        <div class="v" id="sumUnpaidCount">0</div>
+        <div class="l">미결제 건수</div>
+      </div>
+      <div class="summary-card paid">
+        <div class="v" id="sumPaidCount">0</div>
+        <div class="l">결제 완료</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="unpaid" onclick="changeFilter('unpaid')">📝 미결제</button>
+        <button class="filter-tab" data-filter="paid" onclick="changeFilter('paid')">✅ 결제완료</button>
+        <button class="filter-tab" data-filter="all" onclick="changeFilter('all')">전체</button>
+      </div>
+      <input type="text" id="searchInput" placeholder="🔍 고객명/연락처 검색..." oninput="renderList()">
+      <button class="nav-btn primary" onclick="loadOutstanding()">🔄 새로고침</button>
+    </div>
+
+    <div class="item-list" id="itemList">
+      <div class="empty-state">
+        <div class="ico">⏳</div>
+        <div>외상 목록 불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 외상 결제 모달 -->
+  <div class="modal-bd" id="payModal">
+    <div class="modal">
+      <h2>💰 외상 결제</h2>
+      <div id="payInfo" style="background:#f5f5f7; border-radius:10px; padding:14px; margin-bottom:16px;">
+        <!-- 동적 채움 -->
+      </div>
+
+      <div style="font-size:13px; color:#666; margin-bottom:8px;">결제 방법 선택:</div>
+      <div class="pay-method-row">
+        <button class="pay-method active" id="pmCash" onclick="selectPayMethod('현금')">💵 현금</button>
+        <button class="pay-method" id="pmVenmo" onclick="selectPayMethod('Venmo')">💸 Venmo</button>
+      </div>
+
+      <div id="venmoBox" style="display:none; background:linear-gradient(135deg,#3D95CE,#2a7ab0); color:white; padding:14px 16px; border-radius:12px; margin-bottom:14px; text-align:center;">
+        <div style="font-size:11px; opacity:0.85;">VENMO로 송금</div>
+        <div style="font-size:22px; font-weight:700; margin-top:4px;">@Garden-Church</div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closePayModal()">취소</button>
+        <button class="btn-confirm" id="payConfirmBtn" onclick="confirmPay()">결제 완료</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <footer class="app-footer">
+    <div>🛒 가든교회 물품 판매 관리 시스템 © 2026</div>
+    <div class="footer-meta">Garden Church · Powered by GDTech</div>
+  </footer>
+
+  <script>
+    let currentFilter = 'unpaid';
+    let allItems = [];
+    let currentPaySaleId = null;
+    let currentPayMethod = '현금';
+
+    window.addEventListener('load', loadOutstanding);
+
+    async function loadOutstanding() {
+      try {
+        const res = await api('getOutstandingList', { status: 'all' });
+        if (!res.success) {
+          showToast(res.message || '조회 실패', 'error');
+          return;
+        }
+        allItems = res.items || [];
+        const sum = res.summary || {};
+
+        document.getElementById('sumUnpaidAmount').textContent = fmtUSD(sum.unpaidAmount || 0);
+        document.getElementById('sumUnpaidCount').textContent = sum.unpaidCount || 0;
+        document.getElementById('sumPaidCount').textContent = sum.paidCount || 0;
+
+        renderList();
+      } catch (err) {
+        showToast('네트워크 오류: ' + err.message, 'error');
+      }
+    }
+
+    function changeFilter(f) {
+      currentFilter = f;
+      document.querySelectorAll('.filter-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.filter === f);
+      });
+      renderList();
+    }
+
+    function renderList() {
+      const search = document.getElementById('searchInput').value.trim().toLowerCase();
+      const list = document.getElementById('itemList');
+
+      const filtered = allItems.filter(item => {
+        // 상태 필터
+        if (currentFilter === 'unpaid' && item.status !== '미결제') return false;
+        if (currentFilter === 'paid' && item.status !== '결제완료') return false;
+        // 검색 필터
+        if (search) {
+          const text = (item.customerName + ' ' + item.customerPhone + ' ' + item.note).toLowerCase();
+          if (!text.includes(search)) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="ico">${currentFilter === 'unpaid' ? '🎉' : '📭'}</div>
+            <div>${currentFilter === 'unpaid' ? '미결제 외상이 없습니다!' : '해당하는 외상이 없습니다'}</div>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = filtered.map(item => {
+        const isUnpaid = item.status === '미결제';
+        const date = new Date(item.timestamp);
+        const dateStr = date.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const phone = item.customerPhone ? `📞 ${escapeHtml(item.customerPhone)}` : '';
+        const noteHtml = item.note ? `<div>💬 ${escapeHtml(item.note)}</div>` : '';
+        const paidInfo = !isUnpaid && item.paidAt
+          ? `<div>✅ ${new Date(item.paidAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric' })} ${escapeHtml(item.paidMethod)}</div>`
+          : '';
+
+        return `
+          <div class="item-card ${isUnpaid ? 'unpaid' : 'paid'}">
+            <div class="item-info">
+              <div class="item-customer">
+                ${escapeHtml(item.customerName) || '(이름 없음)'}
+                <span class="item-status ${isUnpaid ? 'unpaid' : 'paid'}">
+                  ${isUnpaid ? '미결제' : '결제완료'}
+                </span>
+              </div>
+              <div class="item-meta">
+                <div>${dateStr} · ${escapeHtml(item.saleId)}</div>
+                ${phone ? `<div>${phone}</div>` : ''}
+                ${noteHtml}
+                ${paidInfo}
+              </div>
+            </div>
+            <div>
+              <div class="item-amount">${fmtUSD(item.amount)}</div>
+              <div class="item-actions">
+                <button class="btn-detail" onclick="showDetail('${item.saleId}')">상세</button>
+                ${isUnpaid ? `<button class="btn-pay" onclick="openPayModal('${item.saleId}', '${escapeAttr(item.customerName)}', ${item.amount})">💰 결제</button>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openPayModal(saleId, customerName, amount) {
+      currentPaySaleId = saleId;
+      currentPayMethod = '현금';
+      document.getElementById('payInfo').innerHTML = `
+        <div style="font-size:13px; color:#8e8e93; margin-bottom:4px;">고객</div>
+        <div style="font-size:18px; font-weight:700; margin-bottom:8px;">${escapeHtml(customerName)}</div>
+        <div style="font-size:13px; color:#8e8e93; margin-bottom:4px;">결제 금액</div>
+        <div style="font-size:24px; font-weight:700; color:#34c759;">${fmtUSD(amount)}</div>
+      `;
+      document.getElementById('venmoBox').style.display = 'none';
+      updatePayMethodButtons();
+      document.getElementById('payModal').classList.add('active');
+    }
+
+    function closePayModal() {
+      document.getElementById('payModal').classList.remove('active');
+    }
+
+    function selectPayMethod(m) {
+      currentPayMethod = m;
+      updatePayMethodButtons();
+      document.getElementById('venmoBox').style.display = m === 'Venmo' ? 'block' : 'none';
+    }
+
+    function updatePayMethodButtons() {
+      document.getElementById('pmCash').classList.toggle('active', currentPayMethod === '현금');
+      document.getElementById('pmVenmo').classList.toggle('active', currentPayMethod === 'Venmo');
+    }
+
+    async function confirmPay() {
+      const btn = document.getElementById('payConfirmBtn');
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '처리 중...';
+
+      try {
+        const res = await api('payOutstanding', { saleId: currentPaySaleId, method: currentPayMethod });
+        if (res.success) {
+          showToast(`✅ ${currentPayMethod} 결제 완료`, 'success');
+          closePayModal();
+          loadOutstanding();
+        } else {
+          showToast(res.message || '결제 실패', 'error');
+        }
+      } catch (err) {
+        showToast('네트워크 오류: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
+
+    async function showDetail(saleId) {
+      try {
+        const res = await api('getOutstandingDetail', { saleId: saleId });
+        if (!res.success) {
+          showToast(res.message, 'error');
+          return;
+        }
+        const sale = res.sale;
+        const items = res.items || [];
+        const itemList = items.map(i =>
+          `${escapeHtml(i.name)} × ${i.qty} = ${fmtUSD(i.subtotal)}`
+        ).join('\n');
+
+        alert(
+          `📋 거래 상세\n\n` +
+          `거래번호: ${sale.saleId}\n` +
+          `일시: ${new Date(sale.timestamp).toLocaleString('ko-KR')}\n` +
+          `고객: ${sale.customerName}\n` +
+          (sale.customerPhone ? `연락처: ${sale.customerPhone}\n` : '') +
+          (sale.note ? `메모: ${sale.note}\n` : '') +
+          `상태: ${sale.status}\n` +
+          `\n--- 항목 ---\n${itemList}\n` +
+          `\n총액: ${fmtUSD(sale.totalAmount)}`
+        );
+      } catch (err) {
+        showToast('조회 실패: ' + err.message, 'error');
+      }
+    }
+
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show ' + (type || 'success');
+      setTimeout(() => { t.className = 'toast ' + (type || 'success'); }, 3000);
+    }
+
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, m => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[m]));
+    }
+    function escapeAttr(s) {
+      return String(s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+    function fmtUSD(n) {
+      return '$' + (Number(n) || 0).toFixed(2);
+    }
+  </script>
+</body>
+</html>
