@@ -355,6 +355,7 @@
 
     <div class="action-row">
       <button class="btn-create" onclick="openCreateModal()">➕ 새 선주문 등록</button>
+      <button class="nav-btn primary" onclick="copyOrderLink()" style="background:#2563eb;">📱 고객 주문 링크</button>
       <button class="nav-btn primary" onclick="loadPreorders()" style="background:#007aff;">🔄 새로고침</button>
     </div>
 
@@ -560,7 +561,12 @@
         const phone = po.customerPhone ? `📞 ${escapeHtml(po.customerPhone)}` : '';
         const kakao = po.kakaoId ? `💬 @${escapeHtml(po.kakaoId)}` : '';
         const pickup = po.pickupDate ? `📅 픽업: ${escapeHtml(po.pickupDate)}` : '';
-        const noteStr = po.note ? `💭 ${escapeHtml(po.note)}` : '';
+        const isSelfOrder = po.note && po.note.indexOf('[셀프주문]') === 0;
+        const cleanNote = isSelfOrder ? po.note.replace('[셀프주문]', '').trim() : po.note;
+        const noteStr = cleanNote ? `💭 ${escapeHtml(cleanNote)}` : '';
+        const selfOrderBadge = isSelfOrder
+          ? '<span style="display:inline-block; padding:2px 8px; background:#dbeafe; color:#1e40af; border-radius:8px; font-size:10px; font-weight:600; margin-left:6px;">📱 셀프주문</span>'
+          : '';
         const date = new Date(po.timestamp);
         const dateStr = date.toLocaleString('ko-KR', { month: 'short', day: 'numeric' });
 
@@ -592,11 +598,11 @@
           : '';
 
         return `
-          <div class="item-card ${statusClass}">
+          <div class="item-card ${statusClass}" style="${isSelfOrder && po.status === '예약중' ? 'border-left: 4px solid #2563eb;' : ''}">
             <div class="item-header">
               <div>
                 <div class="item-customer">
-                  <span ${customerClickable}>${escapeHtml(po.customerName)}</span> ${statusBadge}
+                  <span ${customerClickable}>${escapeHtml(po.customerName)}</span> ${statusBadge}${selfOrderBadge}
                 </div>
                 <div class="item-meta">
                   ${dateStr} · ${escapeHtml(po.preorderId)}<br>
@@ -916,6 +922,26 @@
         );
       } catch (err) {
         showToast('조회 실패: ' + err.message, 'error');
+      }
+    }
+
+    /* ─── 고객 주문 링크 공유 ─── */
+    function copyOrderLink() {
+      // 현재 페이지 URL에서 order.html 경로 만들기
+      const orderUrl = window.location.origin + window.location.pathname.replace(/preorder\.html$/, '') + 'order.html';
+
+      // 클립보드에 복사 시도
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(orderUrl)
+          .then(() => {
+            showToast('📋 주문 링크가 복사되었습니다!\n카톡으로 붙여넣어 공유하세요.', 'success');
+          })
+          .catch(() => {
+            // 폴백: prompt
+            prompt('아래 링크를 복사해서 카톡으로 공유하세요:', orderUrl);
+          });
+      } else {
+        prompt('아래 링크를 복사해서 카톡으로 공유하세요:', orderUrl);
       }
     }
 
