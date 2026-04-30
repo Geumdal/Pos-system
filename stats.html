@@ -402,7 +402,7 @@
       }
       header .menu, header .nav {
         display: grid;
-        grid-template-columns: repeat(7, 1fr);
+        grid-template-columns: repeat(8, 1fr);
         gap: 4px;
         width: 100%;
       }
@@ -480,6 +480,7 @@
       <a class="header-btn active" href="stats.html"><span class="hb-icon">📊</span><span class="hb-label">판매통계</span></a>
       <a class="header-btn" href="outstanding.html"><span class="hb-icon">📝</span><span class="hb-label">외상</span></a>
       <a class="header-btn" href="preorder.html"><span class="hb-icon">📅</span><span class="hb-label">선주문</span></a>
+      <a class="header-btn" href="customers.html"><span class="hb-icon">👥</span><span class="hb-label">고객</span></a>
     </div>
   </header>
 
@@ -882,9 +883,11 @@
       const moreCount = (s.items || []).length - 3;
       const moreLabel = moreCount > 0 ? `<span class="sale-item-more">+${moreCount}</span>` : '';
 
-      // 고객 정보
+      // 고객 정보 (연락처 있으면 클릭 가능)
       const customerInfo = s.customerName
-        ? `<span class="sale-customer">👤 ${escapeHtml(s.customerName)}${s.customerPhone ? ' · ' + escapeHtml(s.customerPhone) : ''}</span>`
+        ? (s.customerPhone
+            ? `<span class="sale-customer" style="cursor:pointer;" onclick="showCustomerPopup('${escapeAttr(s.customerPhone)}', loadRecentSales)" title="이 고객의 모든 거래 보기">👤 ${escapeHtml(s.customerName)} · ${escapeHtml(s.customerPhone)}</span>`
+            : `<span class="sale-customer">👤 ${escapeHtml(s.customerName)}</span>`)
         : '';
 
       // 메모

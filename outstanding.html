@@ -221,7 +221,7 @@
       header h1 { font-size: 14px; text-align: center; justify-content: center; }
       header .menu, header .nav {
         display: grid;
-        grid-template-columns: repeat(7, 1fr);
+        grid-template-columns: repeat(8, 1fr);
         gap: 4px; width: 100%;
       }
       .header-btn, .nav-btn {
@@ -263,6 +263,7 @@
       <a class="header-btn" href="stats.html"><span class="hb-icon">📊</span><span class="hb-label">판매통계</span></a>
       <a class="header-btn active" href="outstanding.html"><span class="hb-icon">📝</span><span class="hb-label">외상</span></a>
       <a class="header-btn" href="preorder.html"><span class="hb-icon">📅</span><span class="hb-label">선주문</span></a>
+      <a class="header-btn" href="customers.html"><span class="hb-icon">👥</span><span class="hb-label">고객</span></a>
     </div>
   </header>
 
@@ -404,11 +405,16 @@
           ? `<div>✅ ${new Date(item.paidAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric' })} ${escapeHtml(item.paidMethod)}</div>`
           : '';
 
+        // 고객명/연락처를 클릭하면 고객 합산 팝업 열기 (연락처 있는 경우만)
+        const customerClickable = item.customerPhone
+          ? `style="cursor:pointer; text-decoration:underline; text-decoration-color:#c1c1c6;" onclick="showCustomerPopup('${escapeAttr(item.customerPhone)}', loadOutstanding); event.stopPropagation();"`
+          : '';
+
         return `
           <div class="item-card ${isUnpaid ? 'unpaid' : 'paid'}">
             <div class="item-info">
               <div class="item-customer">
-                ${escapeHtml(item.customerName) || '(이름 없음)'}
+                <span ${customerClickable}>${escapeHtml(item.customerName) || '(이름 없음)'}</span>
                 <span class="item-status ${isUnpaid ? 'unpaid' : 'paid'}">
                   ${isUnpaid ? '미결제' : '결제완료'}
                 </span>
@@ -423,6 +429,7 @@
             <div>
               <div class="item-amount">${fmtUSD(item.amount)}</div>
               <div class="item-actions">
+                ${item.customerPhone ? `<button class="btn-detail" onclick="showCustomerPopup('${escapeAttr(item.customerPhone)}', loadOutstanding)" title="이 고객의 모든 거래 보기">👤 합산</button>` : ''}
                 <button class="btn-detail" onclick="showDetail('${item.saleId}')">상세</button>
                 ${isUnpaid ? `<button class="btn-pay" onclick="openPayModal('${item.saleId}', '${escapeAttr(item.customerName)}', ${item.amount})">💰 결제</button>` : ''}
               </div>

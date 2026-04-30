@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>가든교회 물품 판매 관리 시스템 - 고객 관리</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow-x: hidden; max-width: 100vw; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+    }
+    .container { max-width: 1200px; margin: 0 auto; max-width: 100vw; }
+    .content { padding: 16px; max-width: 100%; }
+    button { font-family: inherit; cursor: pointer; }
+
+    header {
+      background: #1d1d1f; color: white;
+      padding: 0 16px; height: 56px;
+      display: flex; justify-content: space-between; align-items: center;
+      margin: 0 0 16px 0;
+    }
+    header h1 {
+      font-size: 16px; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    header .menu, header .nav { display: flex; gap: 6px; align-items: center; }
+    .header-btn, .nav-btn {
+      background: rgba(255,255,255,0.12); color: white;
+      padding: 7px 13px; border: none; border-radius: 16px;
+      font-size: 13px; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+      white-space: nowrap; cursor: pointer; font-family: inherit;
+    }
+    .header-btn:hover { background: rgba(255,255,255,0.2); }
+    .header-btn.active {
+      background: white; color: #1d1d1f; font-weight: 700;
+    }
+    .nav-btn.primary { background: #007aff; color: white; }
+    .hb-icon { display: inline-block; margin-right: 4px; }
+    .hb-label { display: inline-block; font-size: 13px; }
+
+    .summary-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 12px; margin-bottom: 20px;
+    }
+    .summary-card {
+      background: white; padding: 16px; border-radius: 12px;
+      text-align: center;
+    }
+    .summary-card.unpaid { border-left: 4px solid #ff3b30; }
+    .summary-card.preorder { border-left: 4px solid #5856d6; }
+    .summary-card.total { border-left: 4px solid #007aff; }
+    .summary-card .v {
+      font-size: 22px; font-weight: 700; color: #1d1d1f;
+    }
+    .summary-card.unpaid .v { color: #ff3b30; }
+    .summary-card.preorder .v { color: #5856d6; }
+    .summary-card .l {
+      font-size: 12px; color: #8e8e93; margin-top: 4px;
+    }
+
+    .toolbar {
+      background: white; padding: 12px 16px;
+      border-radius: 12px; margin-bottom: 16px;
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    }
+    .filter-tabs {
+      display: flex; gap: 4px; background: #f5f5f7; padding: 4px;
+      border-radius: 8px;
+    }
+    .filter-tab {
+      padding: 6px 14px; background: transparent; border: none;
+      border-radius: 6px; font-size: 13px; font-weight: 500;
+      color: #8e8e93; cursor: pointer;
+    }
+    .filter-tab.active {
+      background: white; color: #1d1d1f; font-weight: 700;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .toolbar input[type="text"] {
+      flex: 1; min-width: 180px; padding: 8px 12px;
+      border: 1px solid #e5e5ea; border-radius: 8px; font-size: 14px;
+      font-family: inherit;
+    }
+
+    .customer-list {
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .customer-card {
+      background: white; padding: 16px; border-radius: 12px;
+      cursor: pointer; transition: all 0.15s;
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 14px; align-items: center;
+    }
+    .customer-card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      border-color: #d1d1d6;
+      transform: translateY(-1px);
+    }
+    .customer-card.unpaid { border-left: 4px solid #ff3b30; }
+    .customer-card.has-preorder { border-left: 4px solid #5856d6; }
+    .customer-card.unpaid.has-preorder {
+      border-left: 4px solid #ff3b30;
+      background: linear-gradient(to right, #fff5f5 0%, white 50%);
+    }
+
+    .customer-name {
+      font-size: 17px; font-weight: 700; color: #1d1d1f;
+      margin-bottom: 4px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .customer-phone {
+      font-size: 12px; color: #8e8e93; margin-bottom: 8px;
+    }
+    .customer-badges {
+      display: flex; flex-wrap: wrap; gap: 5px;
+    }
+    .cust-badge {
+      display: inline-block; padding: 3px 9px; border-radius: 10px;
+      font-size: 11px; font-weight: 600;
+    }
+    .cust-badge.unpaid { background: #fff5f5; color: #ff3b30; border: 1px solid #ffd5d5; }
+    .cust-badge.preorder { background: #ede9fe; color: #5856d6; }
+    .cust-badge.paid { background: #f0fdf4; color: #34c759; }
+    .cust-badge.total { background: #f5f5f7; color: #4a4a4f; }
+
+    .customer-amount {
+      text-align: right; min-width: 110px;
+    }
+    .customer-amount .total {
+      font-size: 18px; font-weight: 700; color: #1d1d1f;
+    }
+    .customer-amount .outstanding {
+      font-size: 13px; color: #ff3b30; font-weight: 600;
+      margin-top: 2px;
+    }
+    .customer-amount .last-date {
+      font-size: 11px; color: #8e8e93; margin-top: 4px;
+    }
+
+    .empty-state {
+      text-align: center; padding: 60px 20px; color: #8e8e93;
+    }
+    .empty-state .ico { font-size: 48px; margin-bottom: 12px; }
+
+    /* 모달 (팝업은 api.js에서 자동 주입) */
+    .modal-bd {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); z-index: 1000;
+      align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .modal-bd.active { display: flex; }
+    .modal {
+      background: white; border-radius: 16px; padding: 24px;
+      max-width: 480px; width: 100%; max-height: 90vh; overflow-y: auto;
+    }
+
+    .toast {
+      position: fixed; top: 24px; left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      padding: 12px 24px; border-radius: 10px; color: white;
+      font-size: 14px; font-weight: 600; z-index: 10000;
+      transition: transform 0.3s; pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.success { background: #34c759; }
+    .toast.error { background: #ff3b30; }
+
+    .app-footer {
+      background: #1d1d1f;
+      color: rgba(255,255,255,0.5);
+      text-align: center;
+      padding: 16px 12px;
+      font-size: 12px;
+      margin-top: 24px;
+      line-height: 1.6;
+    }
+    .app-footer .footer-meta {
+      font-size: 10px;
+      color: rgba(255,255,255,0.3);
+      margin-top: 4px;
+    }
+
+    @media (max-width: 768px) {
+      header {
+        padding: 8px 12px;
+        flex-direction: column;
+        justify-content: center;
+        align-items: stretch;
+        gap: 6px;
+        height: auto;
+        min-height: 88px;
+      }
+      header h1 { font-size: 14px; text-align: center; justify-content: center; }
+      header .menu, header .nav {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 3px; width: 100%;
+      }
+      .header-btn, .nav-btn {
+        padding: 5px 2px; font-size: 10px; border-radius: 8px;
+        gap: 2px; min-width: 0; overflow: hidden; justify-content: center;
+      }
+      .hb-icon { display: none; }
+      .hb-label { display: inline-block; font-size: 9px; color: white; }
+      .header-btn.active .hb-label { color: #1d1d1f; }
+
+      .summary-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .summary-card { padding: 10px; }
+      .summary-card .v { font-size: 16px; }
+      .summary-card .l { font-size: 10px; }
+
+      .customer-card {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      .customer-amount { text-align: left; }
+    }
+  </style>
+  <script src="config.js"></script>
+  <script src="assets/api.js"></script>
+</head>
+<body>
+
+  <header>
+    <h1>👥<span class="label"> 고객 관리</span></h1>
+    <div class="menu">
+      <a class="header-btn" href="pos.html"><span class="hb-icon">🛒</span><span class="hb-label">대시보드</span></a>
+      <a class="header-btn" href="stockin.html"><span class="hb-icon">📥</span><span class="hb-label">제품입고</span></a>
+      <a class="header-btn" href="admin.html"><span class="hb-icon">📋</span><span class="hb-label">제품관리</span></a>
+      <a class="header-btn" href="qr.html"><span class="hb-icon">🏷️</span><span class="hb-label">QR생성</span></a>
+      <a class="header-btn" href="stats.html"><span class="hb-icon">📊</span><span class="hb-label">판매통계</span></a>
+      <a class="header-btn" href="outstanding.html"><span class="hb-icon">📝</span><span class="hb-label">외상</span></a>
+      <a class="header-btn" href="preorder.html"><span class="hb-icon">📅</span><span class="hb-label">선주문</span></a>
+      <a class="header-btn active" href="customers.html"><span class="hb-icon">👥</span><span class="hb-label">고객</span></a>
+    </div>
+  </header>
+
+  <div class="content">
+    <div class="summary-grid">
+      <div class="summary-card total">
+        <div class="v" id="sumTotalCustomers">0</div>
+        <div class="l">전체 고객</div>
+      </div>
+      <div class="summary-card unpaid">
+        <div class="v" id="sumUnpaidCustomers">0</div>
+        <div class="l">미결제 고객</div>
+      </div>
+      <div class="summary-card unpaid">
+        <div class="v" id="sumUnpaidAmount">$0.00</div>
+        <div class="l">미결제 총액</div>
+      </div>
+      <div class="summary-card preorder">
+        <div class="v" id="sumPreorderAmount">$0.00</div>
+        <div class="l">예약중 총액</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="all" onclick="changeFilter('all')">전체</button>
+        <button class="filter-tab" data-filter="unpaid" onclick="changeFilter('unpaid')">📝 미결제</button>
+        <button class="filter-tab" data-filter="preorder" onclick="changeFilter('preorder')">📅 예약중</button>
+      </div>
+      <input type="text" id="searchInput" placeholder="🔍 이름/연락처 검색..." oninput="renderList()">
+      <button class="nav-btn primary" onclick="loadCustomers()">🔄 새로고침</button>
+    </div>
+
+    <div class="customer-list" id="customerList">
+      <div class="empty-state">
+        <div class="ico">⏳</div>
+        <div>고객 목록 불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <footer class="app-footer">
+    <div>🛒 가든교회 물품 판매 관리 시스템 © 2026</div>
+    <div class="footer-meta">Garden Church · Powered by GDTech</div>
+  </footer>
+
+  <script>
+    let currentFilter = 'all';
+    let allCustomers = [];
+
+    window.addEventListener('load', loadCustomers);
+
+    async function loadCustomers() {
+      try {
+        const res = await api('getAllCustomers', {});
+        if (!res.success) {
+          showToast(res.message || '조회 실패', 'error');
+          return;
+        }
+        allCustomers = res.customers || [];
+        const sum = res.summary || {};
+
+        document.getElementById('sumTotalCustomers').textContent = sum.totalCustomers || 0;
+        document.getElementById('sumUnpaidCustomers').textContent = sum.unpaidCustomers || 0;
+        document.getElementById('sumUnpaidAmount').textContent = fmtUSD(sum.totalUnpaid || 0);
+        document.getElementById('sumPreorderAmount').textContent = fmtUSD(sum.pendingPreorders || 0);
+
+        renderList();
+      } catch (err) {
+        showToast('네트워크 오류: ' + err.message, 'error');
+      }
+    }
+
+    function changeFilter(f) {
+      currentFilter = f;
+      document.querySelectorAll('.filter-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.filter === f);
+      });
+      renderList();
+    }
+
+    function renderList() {
+      const search = document.getElementById('searchInput').value.trim().toLowerCase();
+      const list = document.getElementById('customerList');
+
+      const filtered = allCustomers.filter(c => {
+        if (currentFilter === 'unpaid' && c.unpaid.amount === 0) return false;
+        if (currentFilter === 'preorder' && c.pendingPreorder.amount === 0) return false;
+        if (search) {
+          const text = ((c.name || '') + ' ' + (c.phone || '')).toLowerCase();
+          if (!text.includes(search)) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="ico">${currentFilter === 'unpaid' ? '🎉' : '📭'}</div>
+            <div>${currentFilter === 'unpaid' ? '미결제 고객이 없습니다!' : '해당하는 고객이 없습니다'}</div>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = filtered.map(c => {
+        const hasUnpaid = c.unpaid.amount > 0;
+        const hasPreorder = c.pendingPreorder.amount > 0;
+        const cardClass = (hasUnpaid ? 'unpaid' : '') + (hasPreorder ? ' has-preorder' : '');
+        const lastDate = c.lastDate ? new Date(c.lastDate).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : '';
+
+        const badges = [];
+        if (c.paid.count > 0) badges.push(`<span class="cust-badge paid">✅ 결제 ${c.paid.count}건</span>`);
+        if (c.unpaid.count > 0) badges.push(`<span class="cust-badge unpaid">📝 미결제 ${c.unpaid.count}건</span>`);
+        if (c.pendingPreorder.count > 0) badges.push(`<span class="cust-badge preorder">📅 예약중 ${c.pendingPreorder.count}건</span>`);
+        if (c.pickedUp.count > 0) badges.push(`<span class="cust-badge paid">📦 픽업 ${c.pickedUp.count}건</span>`);
+
+        return `
+          <div class="customer-card ${cardClass}" onclick="showCustomerPopup('${escapeAttr(c.phone)}', loadCustomers)">
+            <div>
+              <div class="customer-name">${escapeHtml(c.name || '(이름 없음)')}</div>
+              <div class="customer-phone">📞 ${escapeHtml(c.phone)}</div>
+              <div class="customer-badges">${badges.join('')}</div>
+            </div>
+            <div class="customer-amount">
+              <div class="total">${fmtUSD(c.totalAmount)}</div>
+              ${hasUnpaid ? `<div class="outstanding">미결제 ${fmtUSD(c.unpaid.amount)}</div>` : ''}
+              ${lastDate ? `<div class="last-date">최근 ${lastDate}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  </script>
+</body>
+</html>
