@@ -412,16 +412,22 @@
       gap: 8px; margin-bottom: 16px;
     }
     .pay-method {
-      padding: 16px;
+      padding: 14px 6px;
       background: white;
       border: 2px solid #e5e5ea;
       border-radius: 12px;
-      font-size: 15px; font-weight: 600;
+      font-size: 13px; font-weight: 600;
       text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .pay-method.active {
       border-color: #007aff; background: rgba(0,122,255,0.05);
       color: #007aff;
+    }
+    @media (max-width: 480px) {
+      .pay-method { padding: 12px 4px; font-size: 12px; }
     }
     .pay-amount-box {
       background: #f5f5f7;
@@ -783,13 +789,15 @@
     <div class="modal">
       <h2>💳 결제</h2>
 
-      <div class="pay-method-row" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+      <div class="pay-method-row" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:5px;">
         <button class="pay-method active" id="payCash"
                 onclick="selectMethod('현금')">💵 현금</button>
         <button class="pay-method" id="payVenmo"
                 onclick="selectMethod('Venmo')">💸 Venmo</button>
         <button class="pay-method" id="payCredit"
                 onclick="selectMethod('외상')" style="background:#fff5f5; color:#c62828; border-color:#ffd5d5;">📝 외상</button>
+        <button class="pay-method" id="payPreorder"
+                onclick="selectMethod('선주문')" style="background:#ede9fe; color:#5856d6; border-color:#d6cef8;">📅 선주문</button>
       </div>
 
       <div id="venmoBox" style="display:none; background:linear-gradient(135deg,#3D95CE,#2a7ab0); color:white; padding:14px 16px; border-radius:12px; margin-bottom:14px; text-align:center;">
@@ -805,18 +813,31 @@
         </div>
       </div>
 
-      <!-- 고객정보 + 메모 (외상이거나 메모가 필요한 경우) -->
+      <div id="preorderBox" style="display:none; background:#ede9fe; border:1px solid #d6cef8; padding:12px 14px; border-radius:10px; margin-bottom:14px;">
+        <div style="font-size:13px; font-weight:600; color:#5856d6; margin-bottom:8px;">📅 선주문 (사전 예약)</div>
+        <div style="font-size:12px; color:#5856d6; line-height:1.5;">
+          재고를 미리 차감하고 픽업 시 결제합니다. 카톡으로 받은 예약을 입력할 때 사용하세요.
+        </div>
+      </div>
+
+      <!-- 고객정보 + 메모 -->
       <div id="customerInfoSection" style="margin-bottom:14px;">
         <details id="customerDetails" style="background:#f5f5f7; border-radius:10px; padding:10px 14px;">
           <summary style="cursor:pointer; font-size:13px; font-weight:600; color:#1d1d1f;">
-            👤 고객 정보 / 메모 추가 <span id="creditRequired" style="color:#ff3b30; display:none;">(외상 시 필수)</span>
+            👤 고객 정보 / 메모 추가 <span id="creditRequired" style="color:#ff3b30; display:none;">(외상/선주문 시 필수)</span>
           </summary>
           <div style="margin-top:10px; display:grid; gap:8px;">
             <input type="text" id="customerName" placeholder="고객명 (예: 김영희)" maxlength="40"
                    style="padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:14px; font-family:inherit;">
-            <input type="text" id="customerPhone" placeholder="연락처 (예: 703-555-1234)" maxlength="30"
-                   style="padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:14px; font-family:inherit;">
-            <input type="text" id="saleNote" placeholder="메모 (예: 친구 김OO 위해 결제, 배달 주소 등)" maxlength="200"
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <input type="text" id="customerPhone" placeholder="연락처 (703-555-1234)" maxlength="30"
+                     style="padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:14px; font-family:inherit;">
+              <input type="text" id="customerKakao" placeholder="카톡 ID (선주문 시)" maxlength="40"
+                     style="padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:14px; font-family:inherit; display:none;">
+            </div>
+            <input type="date" id="pickupDate" placeholder="픽업 예정일"
+                   style="padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:14px; font-family:inherit; display:none;">
+            <input type="text" id="saleNote" placeholder="메모 (배달 주소, 친구 위해 결제, 카톡 예약 등)" maxlength="200"
                    style="padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:14px; font-family:inherit;">
           </div>
         </details>
@@ -1234,10 +1255,15 @@
       document.getElementById('tenderedInput').value     = '';
       document.getElementById('venmoBox').style.display = 'none';
       document.getElementById('creditBox').style.display = 'none';
+      document.getElementById('preorderBox').style.display = 'none';
       // 고객 정보 초기화
       document.getElementById('customerName').value = '';
       document.getElementById('customerPhone').value = '';
+      document.getElementById('customerKakao').value = '';
+      document.getElementById('pickupDate').value = '';
       document.getElementById('saleNote').value = '';
+      document.getElementById('customerKakao').style.display = 'none';
+      document.getElementById('pickupDate').style.display = 'none';
       document.getElementById('customerDetails').open = false;
       document.getElementById('creditRequired').style.display = 'none';
       calcChange();
@@ -1252,20 +1278,55 @@
       payMethod = m;
       updateMethodButtons();
 
-      // 외상 모드
+      const cashSection = document.getElementById('cashSection');
+      const venmoBox = document.getElementById('venmoBox');
+      const creditBox = document.getElementById('creditBox');
+      const preorderBox = document.getElementById('preorderBox');
+      const kakaoInput = document.getElementById('customerKakao');
+      const pickupInput = document.getElementById('pickupDate');
+      const noteInput = document.getElementById('saleNote');
+      const customerDetails = document.getElementById('customerDetails');
+      const creditRequired = document.getElementById('creditRequired');
+      const confirmBtn = document.getElementById('confirmBtn');
+
+      // 모두 숨기기 (기본)
+      venmoBox.style.display = 'none';
+      creditBox.style.display = 'none';
+      preorderBox.style.display = 'none';
+      kakaoInput.style.display = 'none';
+      pickupInput.style.display = 'none';
+
       if (m === '외상') {
-        document.getElementById('cashSection').style.display = 'none';
-        document.getElementById('venmoBox').style.display = 'none';
-        document.getElementById('creditBox').style.display = 'block';
-        document.getElementById('customerDetails').open = true;
-        document.getElementById('creditRequired').style.display = 'inline';
+        cashSection.style.display = 'none';
+        creditBox.style.display = 'block';
+        customerDetails.open = true;
+        creditRequired.style.display = 'inline';
+        creditRequired.textContent = '(외상 시 필수)';
+        confirmBtn.textContent = '📝 외상 등록';
+        confirmBtn.style.background = '#ff3b30';
         document.getElementById('customerName').focus();
+
+      } else if (m === '선주문') {
+        cashSection.style.display = 'none';
+        preorderBox.style.display = 'block';
+        kakaoInput.style.display = 'block';
+        pickupInput.style.display = 'block';
+        customerDetails.open = true;
+        creditRequired.style.display = 'inline';
+        creditRequired.textContent = '(선주문 시 필수)';
+        noteInput.placeholder = '메모 (예: 카톡 예약, 픽업 시간, 특이사항 등)';
+        confirmBtn.textContent = '📅 선주문 등록';
+        confirmBtn.style.background = '#5856d6';
+        document.getElementById('customerName').focus();
+
       } else {
         // 현금/Venmo
-        document.getElementById('cashSection').style.display = 'block';
-        document.getElementById('creditBox').style.display = 'none';
-        document.getElementById('venmoBox').style.display = m === 'Venmo' ? 'block' : 'none';
-        document.getElementById('creditRequired').style.display = 'none';
+        cashSection.style.display = 'block';
+        venmoBox.style.display = m === 'Venmo' ? 'block' : 'none';
+        creditRequired.style.display = 'none';
+        noteInput.placeholder = '메모 (예: 친구 김OO 위해 결제, 배달 주소 등)';
+        confirmBtn.textContent = '결제 완료';
+        confirmBtn.style.background = '';
         if (m === 'Venmo') setExact();
       }
       calcChange();
@@ -1274,6 +1335,7 @@
       document.getElementById('payCash').classList.toggle('active', payMethod === '현금');
       document.getElementById('payVenmo').classList.toggle('active', payMethod === 'Venmo');
       document.getElementById('payCredit').classList.toggle('active', payMethod === '외상');
+      document.getElementById('payPreorder').classList.toggle('active', payMethod === '선주문');
 
       // 외상 active 시 빨강 강조
       const creditBtn = document.getElementById('payCredit');
@@ -1285,6 +1347,18 @@
         creditBtn.style.background = '#fff5f5';
         creditBtn.style.color = '#c62828';
         creditBtn.style.borderColor = '#ffd5d5';
+      }
+
+      // 선주문 active 시 보라 강조
+      const preorderBtn = document.getElementById('payPreorder');
+      if (payMethod === '선주문') {
+        preorderBtn.style.background = '#5856d6';
+        preorderBtn.style.color = 'white';
+        preorderBtn.style.borderColor = '#5856d6';
+      } else {
+        preorderBtn.style.background = '#ede9fe';
+        preorderBtn.style.color = '#5856d6';
+        preorderBtn.style.borderColor = '#d6cef8';
       }
     }
     function setExact() {
@@ -1302,11 +1376,11 @@
       calcChange();
     }
     function calcChange() {
-      const total    = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
       const btn = document.getElementById('confirmBtn');
 
-      // 외상 모드는 고객명만 있으면 결제 가능
-      if (payMethod === '외상') {
+      // 외상/선주문은 고객명만 있으면 진행 가능
+      if (payMethod === '외상' || payMethod === '선주문') {
         const name = document.getElementById('customerName').value.trim();
         btn.disabled = !name;
         return;
@@ -1322,9 +1396,10 @@
       btn.disabled = (tendered < total);
     }
 
-    // 고객명 입력 시 외상 결제 버튼 활성화 체크
+    // 고객명 입력 시 외상/선주문 버튼 활성화 체크
     document.addEventListener('input', (e) => {
-      if (e.target && e.target.id === 'customerName' && payMethod === '외상') {
+      if (e.target && e.target.id === 'customerName' &&
+          (payMethod === '외상' || payMethod === '선주문')) {
         calcChange();
       }
     });
@@ -1333,8 +1408,55 @@
       const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
       const customerName  = document.getElementById('customerName').value.trim();
       const customerPhone = document.getElementById('customerPhone').value.trim();
+      const customerKakao = document.getElementById('customerKakao').value.trim();
+      const pickupDate    = document.getElementById('pickupDate').value;
       const note          = document.getElementById('saleNote').value.trim();
 
+      // 선주문 분기 → createPreorder API 호출
+      if (payMethod === '선주문') {
+        if (!customerName) {
+          showToast('선주문은 고객명이 필수입니다', 'error');
+          document.getElementById('customerDetails').open = true;
+          document.getElementById('customerName').focus();
+          return;
+        }
+
+        const btn = document.getElementById('confirmBtn');
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '처리 중...';
+
+        const items = cart.map(c => ({ id: c.id, qty: c.qty }));
+        api('createPreorder', {
+          customerName: customerName,
+          customerPhone: customerPhone,
+          kakaoId: customerKakao,
+          pickupDate: pickupDate,
+          note: note,
+          items: items
+        })
+          .then(res => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            if (res.success) {
+              closePaymentModal();
+              showPreorderConfirmation(res.preorder, customerName, total);
+              cart = [];
+              renderCart();
+              loadProducts();
+            } else {
+              showToast(res.message || '실패', 'error');
+            }
+          })
+          .catch(err => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            showToast('오류: ' + (err.message || err), 'error');
+          });
+        return;
+      }
+
+      // 외상 / 현금 / Venmo
       let tendered;
       if (payMethod === '외상') {
         if (!customerName) {
@@ -1353,6 +1475,7 @@
       }
 
       const btn = document.getElementById('confirmBtn');
+      const originalText = btn.textContent;
       btn.disabled = true;
       btn.textContent = '처리 중...';
 
@@ -1367,18 +1490,18 @@
           note: note
         }
       })
-        .then(res => { onPaymentResult(res); })
+        .then(res => { onPaymentResult(res, originalText); })
         .catch(err => {
           btn.disabled = false;
-          btn.textContent = '결제 완료';
+          btn.textContent = originalText;
           showToast('오류: ' + (err.message || err), 'error');
         });
     }
 
-    function onPaymentResult(res) {
+    function onPaymentResult(res, originalBtnText) {
       const btn = document.getElementById('confirmBtn');
       btn.disabled = false;
-      btn.textContent = '결제 완료';
+      btn.textContent = originalBtnText || '결제 완료';
 
       if (!res.success) {
         showToast(res.message, 'error');
@@ -1390,6 +1513,57 @@
       cart = [];
       renderCart();
       loadProducts();
+    }
+
+    /* 선주문 등록 완료 영수증 */
+    function showPreorderConfirmation(preorder, customerName, totalAmount) {
+      const date = new Date();
+      const dateStr = date.toLocaleString('ko-KR');
+
+      const itemsHtml = preorder.items.map(it => `
+        <div class="receipt-item">
+          <span>${escapeHtml(cleanProductName(it.name))}</span>
+          <span>${it.qty}×${fmtUSD(it.price)}</span>
+          <span>${fmtUSD(it.subtotal)}</span>
+        </div>
+      `).join('');
+
+      const html = `
+        <div class="receipt">
+          <div class="receipt-header">
+            <div class="store" style="color:#5856d6;">📅 선주문 접수증</div>
+            <div class="meta">${escapeHtml(preorder.preorderId)}<br>${dateStr}</div>
+          </div>
+
+          <div style="background:#ede9fe; border:2px solid #5856d6; padding:12px; border-radius:10px; margin-bottom:10px; text-align:center;">
+            <div style="font-size:18px; font-weight:700; color:#5856d6;">📅 선주문 등록 완료</div>
+            <div style="font-size:12px; color:#5856d6; margin-top:4px;">
+              재고가 예약되었습니다. 픽업 시 결제 처리됩니다.
+            </div>
+          </div>
+
+          <div style="background:#f5f5f7; padding:10px 12px; border-radius:8px; margin-bottom:10px; font-size:13px;">
+            <div><strong>고객:</strong> ${escapeHtml(customerName)}</div>
+          </div>
+
+          <div class="receipt-items">
+            ${itemsHtml}
+          </div>
+          <div class="receipt-summary">
+            <div><span>항목수</span><span>${preorder.itemCount}</span></div>
+            <div class="total"><span>예약 총액</span><span>${fmtUSD(preorder.totalAmount)}</span></div>
+          </div>
+          <div class="receipt-footer" style="color:#5856d6; font-weight:600;">
+            픽업 시 결제하시면 됩니다
+          </div>
+        </div>
+        <div class="modal-actions" style="margin-top:16px;">
+          <button class="btn-cancel" onclick="window.location.href='preorder.html'">📅 선주문 페이지</button>
+          <button class="btn-confirm" onclick="closeReceipt()">확인</button>
+        </div>
+      `;
+      document.getElementById('receiptContent').innerHTML = html;
+      document.getElementById('receiptModal').classList.add('active');
     }
 
     /* ─── 영수증 ─── */
