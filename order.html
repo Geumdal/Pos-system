@@ -185,27 +185,61 @@
     .modal-bd {
       display: none; position: fixed; inset: 0;
       background: rgba(0,0,0,0.6); z-index: 1000;
-      align-items: flex-end; justify-content: center;
+      align-items: center; justify-content: center;
+      padding: 16px;
     }
     .modal-bd.active { display: flex; }
     .modal {
       background: white;
-      border-radius: 24px 24px 0 0;
+      border-radius: 16px;
       max-width: 600px; width: 100%;
       max-height: 90vh; overflow-y: auto;
-      animation: slideUp 0.25s ease-out;
+      animation: fadeInUp 0.25s ease-out;
+      position: relative;
     }
-    @keyframes slideUp {
-      from { transform: translateY(100%); }
-      to { transform: translateY(0); }
+    .modal-close-x {
+      position: absolute;
+      top: 12px; right: 12px;
+      width: 36px; height: 36px;
+      background: #f5f5f7;
+      border: none; border-radius: 50%;
+      font-size: 20px; cursor: pointer;
+      color: #1d1d1f;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10;
+    }
+    .modal-close-x:hover { background: #e5e5ea; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* 모바일: 하단에서 슬라이드 업 */
+    @media (max-width: 600px) {
+      .modal-bd {
+        align-items: flex-end;
+        padding: 0;
+      }
+      .modal {
+        border-radius: 24px 24px 0 0;
+        animation: slideUp 0.25s ease-out;
+      }
+      @keyframes slideUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+      }
     }
     .modal-handle {
       width: 40px; height: 4px;
       background: #d1d1d6; border-radius: 2px;
       margin: 8px auto;
+      display: none;
+    }
+    @media (max-width: 600px) {
+      .modal-handle { display: block; }
     }
     .modal-content {
-      padding: 8px 20px 24px;
+      padding: 20px 20px 24px;
     }
     .modal-content h2 {
       font-size: 20px; font-weight: 700;
@@ -425,8 +459,9 @@
   </div>
 
   <!-- 장바구니 모달 -->
-  <div class="modal-bd" id="cartModal">
-    <div class="modal">
+  <div class="modal-bd" id="cartModal" onclick="closeModalOnBg(event, 'cartModal')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close-x" onclick="closeCart()" title="닫기">×</button>
       <div class="modal-handle"></div>
       <div class="modal-content">
         <h2>🛒 장바구니</h2>
@@ -452,8 +487,9 @@
   </div>
 
   <!-- 주문서 모달 -->
-  <div class="modal-bd" id="checkoutModal">
-    <div class="modal">
+  <div class="modal-bd" id="checkoutModal" onclick="closeModalOnBg(event, 'checkoutModal')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button class="modal-close-x" onclick="closeCheckout()" title="닫기">×</button>
       <div class="modal-handle"></div>
       <div class="modal-content">
         <h2>📝 주문서 작성</h2>
@@ -510,6 +546,7 @@
   <!-- 완료 모달 -->
   <div class="modal-bd" id="successModal">
     <div class="modal">
+      <button class="modal-close-x" onclick="closeSuccess()" title="닫기">×</button>
       <div class="modal-handle"></div>
       <div class="modal-content">
         <div class="success">
@@ -521,9 +558,12 @@
 
           <div class="success-info" id="successInfo"></div>
 
-          <button class="btn-submit" onclick="resetAndStart()" style="margin-top:20px; width:100%;">
-            🛒 추가 주문하기
-          </button>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:20px;">
+            <button class="btn-back" onclick="closeSuccess()">닫기</button>
+            <button class="btn-submit" onclick="resetAndStart()">
+              🛒 추가 주문하기
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -714,6 +754,25 @@
     }
     function closeCart() {
       document.getElementById('cartModal').classList.remove('active');
+    }
+
+    /* 배경 클릭 시 모달 닫기 (모달 본체 클릭은 무시) */
+    function closeModalOnBg(event, modalId) {
+      if (event.target.id === modalId) {
+        document.getElementById(modalId).classList.remove('active');
+      }
+    }
+
+    /* 성공 모달 닫기 (카트는 비운 상태) */
+    function closeSuccess() {
+      document.getElementById('successModal').classList.remove('active');
+      // 폼 초기화
+      document.getElementById('custName').value = '';
+      document.getElementById('custPhone').value = '';
+      document.getElementById('custKakao').value = '';
+      document.getElementById('custNote').value = '';
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('pickupDate').value = today;
     }
 
     function renderCartItems() {
