@@ -250,6 +250,30 @@ function _injectCustomerPopup() {
         font-weight: 600; font-size: 13px; margin-left: 8px;
         white-space: nowrap;
       }
+      .cust-tx-badges {
+        display: flex; flex-wrap: wrap; gap: 4px;
+        margin-top: 3px; margin-bottom: 3px;
+      }
+      .cust-method-badge {
+        display: inline-flex; align-items: center; gap: 3px;
+        padding: 2px 8px; border-radius: 8px;
+        font-size: 10px; font-weight: 600;
+      }
+      .cust-method-cash {
+        background: #d4f4dd; color: #1c7c2f;
+      }
+      .cust-method-venmo {
+        background: #d8edf8; color: #1a4f6e;
+      }
+      .cust-method-credit {
+        background: #fff5f5; color: #c62828;
+        border: 1px solid #ffd5d5;
+      }
+      .cust-pickup-date {
+        display: inline-block; padding: 2px 8px;
+        background: #ede9fe; color: #5856d6;
+        border-radius: 8px; font-size: 10px; font-weight: 600;
+      }
       .cust-tx-right {
         display: flex; flex-direction: column; gap: 4px;
         align-items: flex-end; margin-left: 8px;
@@ -343,7 +367,8 @@ function _renderCustomerPopup(res) {
   const sales = res.sales || [];
   const preorders = res.preorders || [];
 
-  const totalAmount = c.paid.amount + c.unpaid.amount + c.pendingPreorder.amount + c.pickedUp.amount;
+  // 전체 합계 - 결제완료 + 미결제만 (픽업완료는 결제완료에 이미 포함, 예약중은 결제 안 된 상태)
+  const totalAmount = c.paid.amount + c.unpaid.amount;
 
   // 미결제 외상 거래
   const unpaidSales = sales.filter(s => s.status === '외상');
@@ -365,7 +390,33 @@ function _renderCustomerPopup(res) {
       const amt = type === 'preorder' ? it.totalAmount : it.amount;
       const id = type === 'preorder' ? it.preorderId : it.saleId;
 
-      // 예약중 선주문에는 픽업 버튼 추가
+      // 결제 방법 배지 (sale인 경우만)
+      let methodBadge = '';
+      if (type === 'sale' && it.method) {
+        const m = it.method;
+        let badgeClass = 'cust-method-cash';
+        let icon = '💵';
+        if (m === 'Venmo' || m === 'venmo') {
+          badgeClass = 'cust-method-venmo';
+          icon = '💸';
+        } else if (m === '외상') {
+          badgeClass = 'cust-method-credit';
+          icon = '📝';
+        }
+        methodBadge = `<span class="cust-method-badge ${badgeClass}">${icon} ${escapeHtml(m)}</span>`;
+      }
+
+      // 픽업 예정일 (preorder)
+      const pickupDateStr = (type === 'preorder' && it.pickupDate)
+        ? `<span class="cust-pickup-date">📅 픽업예정 ${escapeHtml(it.pickupDate)}</span>`
+        : '';
+
+      // 픽업 완료 시간 (preorder)
+      const pickedAtStr = (type === 'preorder' && it.pickupAt)
+        ? `<span class="cust-pickup-date" style="background:#f0fdf4; color:#34c759;">📦 픽업 ${new Date(it.pickupAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>`
+        : '';
+
+      // 예약중 선주문 픽업 버튼
       const pickupBtn = (type === 'preorder' && it.status === '예약중')
         ? `<button class="cust-pickup-btn" onclick="openPickupFromPopup('${escapeAttr(id)}', ${amt}); event.stopPropagation();">🛍️ 픽업 결제</button>`
         : '';
@@ -373,7 +424,8 @@ function _renderCustomerPopup(res) {
       return `
         <div class="cust-tx-row">
           <div class="cust-tx-info">
-            <div class="cust-tx-date">${dateStr}${type === 'sale' ? ' · ' + escapeHtml(it.method) : ''}${type === 'preorder' && it.pickupDate ? ' · 픽업예정 ' + escapeHtml(it.pickupDate) : ''}</div>
+            <div class="cust-tx-date">${dateStr}</div>
+            <div class="cust-tx-badges">${methodBadge}${pickupDateStr}${pickedAtStr}</div>
             <div class="cust-tx-items" title="${escapeHtml(itemNames)}">${escapeHtml(itemNames)}</div>
             ${it.note ? `<div style="font-size:10px; color:#8e8e93; margin-top:2px;">💬 ${escapeHtml(it.note)}</div>` : ''}
           </div>
@@ -444,7 +496,10 @@ function _renderCustomerPopup(res) {
 
     ${pickedUpPos.length > 0 ? `
       <div class="cust-section pickedup">
-        <div class="cust-section-title">📦 픽업 완료 (${pickedUpPos.length}건)</div>
+        <div class="cust-section-title">
+          📦 픽업 완료 (${pickedUpPos.length}건)
+          <span style="font-size:10px; color:#8e8e93; font-weight:500; margin-left:6px;">(결제완료에 포함됨)</span>
+        </div>
         ${renderTxRow(pickedUpPos, 'preorder')}
       </div>
     ` : ''}
