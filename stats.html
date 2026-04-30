@@ -184,10 +184,72 @@
     }
 
     /* 거래 카드 리스트 (새 형식) */
+    .sales-toolbar {
+      display: inline-flex; align-items: center; gap: 6px;
+      flex-wrap: wrap;
+    }
+    .filter-date {
+      padding: 6px 10px; border: 1px solid #d1d1d6;
+      border-radius: 6px; font-size: 12px;
+      font-family: inherit; background: white;
+      color: #1d1d1f;
+    }
+    .filter-btn {
+      padding: 6px 10px; background: #f5f5f7;
+      border: 1px solid #e5e5ea; border-radius: 6px;
+      font-size: 14px; cursor: pointer;
+      color: #1d1d1f;
+    }
+    .filter-btn:hover { background: #ebebed; }
+
+    .sales-pagesize-row {
+      display: flex; justify-content: space-between;
+      align-items: center; flex-wrap: wrap;
+      gap: 8px; margin-bottom: 10px;
+      padding: 8px 12px; background: #f9f9fb;
+      border-radius: 8px;
+    }
+    .page-info {
+      font-size: 12px; color: #6e6e73; font-weight: 600;
+    }
+    .pagesize-selector {
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .pagesize-btn {
+      padding: 4px 10px; background: white;
+      border: 1px solid #e5e5ea; border-radius: 6px;
+      font-size: 12px; cursor: pointer;
+      color: #6e6e73; font-family: inherit;
+      min-width: 32px;
+    }
+    .pagesize-btn.active {
+      background: #007aff; color: white;
+      border-color: #007aff; font-weight: 600;
+    }
+
+    .pagination {
+      display: flex; justify-content: center; align-items: center;
+      gap: 8px; margin-top: 12px;
+      padding: 10px; background: #f9f9fb;
+      border-radius: 8px;
+    }
+    .page-btn {
+      padding: 6px 14px; background: white;
+      border: 1px solid #d1d1d6; border-radius: 6px;
+      font-size: 13px; cursor: pointer;
+      color: #1d1d1f; font-family: inherit;
+    }
+    .page-btn:hover:not(:disabled) { background: #f5f5f7; }
+    .page-btn:disabled {
+      opacity: 0.4; cursor: not-allowed;
+    }
+    .page-current {
+      font-size: 13px; font-weight: 600;
+      color: #1d1d1f; min-width: 60px; text-align: center;
+    }
+
     .sales-cards {
       display: flex; flex-direction: column; gap: 10px;
-      max-height: 600px; overflow-y: auto;
-      padding-right: 4px;
     }
     .sale-card {
       background: white;
@@ -479,8 +541,36 @@
         <div id="topProducts"><div class="empty-state"><span class="loading"></span></div></div>
       </div>
       <div class="chart-card">
-        <h3>📋 최근 거래</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+          <h3 style="margin:0;">📋 최근 거래</h3>
+          <div class="sales-toolbar">
+            <input type="date" id="filterDateStart" onchange="onFilterChange()"
+                   class="filter-date" title="시작일">
+            <span style="color:#8e8e93;">~</span>
+            <input type="date" id="filterDateEnd" onchange="onFilterChange()"
+                   class="filter-date" title="종료일">
+            <button class="filter-btn" onclick="resetDateFilter()" title="필터 초기화">↻</button>
+          </div>
+        </div>
+
+        <div class="sales-pagesize-row">
+          <span class="page-info" id="pageInfo">전체 0건</span>
+          <div class="pagesize-selector">
+            <span style="font-size:12px; color:#8e8e93;">표시:</span>
+            <button class="pagesize-btn active" data-size="5" onclick="changePageSize(5)">5</button>
+            <button class="pagesize-btn" data-size="10" onclick="changePageSize(10)">10</button>
+            <button class="pagesize-btn" data-size="20" onclick="changePageSize(20)">20</button>
+            <button class="pagesize-btn" data-size="50" onclick="changePageSize(50)">50</button>
+          </div>
+        </div>
+
         <div id="recentSales"><div class="empty-state"><span class="loading"></span></div></div>
+
+        <div class="pagination" id="pagination" style="display:none;">
+          <button class="page-btn" id="prevBtn" onclick="changePage(-1)">‹ 이전</button>
+          <span class="page-current" id="pageCurrent">1 / 1</span>
+          <button class="page-btn" id="nextBtn" onclick="changePage(1)">다음 ›</button>
+        </div>
       </div>
     </div>
   </div>
@@ -661,23 +751,116 @@
       `).join('');
     }
 
+    /* ─── 거래 이력: 페이지네이션 + 필터 상태 ─── */
+    let allSales = [];           // 전체 거래 (서버에서 받은 원본)
+    let filteredSales = [];      // 날짜 필터 적용 후
+    let currentPage = 1;
+    let pageSize = 5;
+
     function loadRecentSales() {
-      api('getRecentSales', { limit: 30 })
+      // 충분히 큰 limit으로 한번 받아와서 클라이언트 필터링
+      api('getRecentSales', { limit: 200 })
         .then(res => { onRecentSalesLoaded(res); })
         .catch(err => { console.error(err); });
     }
 
     function onRecentSalesLoaded(res) {
+      if (!res.success || !res.sales) {
+        allSales = [];
+      } else {
+        allSales = res.sales;
+      }
+      currentPage = 1;
+      applyFiltersAndRender();
+    }
+
+    function applyFiltersAndRender() {
+      // 1. 날짜 필터 적용
+      const startStr = document.getElementById('filterDateStart').value;
+      const endStr = document.getElementById('filterDateEnd').value;
+
+      filteredSales = allSales.filter(s => {
+        if (!s.date) return false;
+        const saleDate = new Date(s.date);
+        if (isNaN(saleDate.getTime())) return false;
+
+        if (startStr) {
+          const startDate = new Date(startStr + 'T00:00:00');
+          if (saleDate < startDate) return false;
+        }
+        if (endStr) {
+          const endDate = new Date(endStr + 'T23:59:59');
+          if (saleDate > endDate) return false;
+        }
+        return true;
+      });
+
+      // 2. 페이지 계산
+      const totalCount = filteredSales.length;
+      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      // 3. 현재 페이지 슬라이스
+      const startIdx = (currentPage - 1) * pageSize;
+      const endIdx = startIdx + pageSize;
+      const pageSales = filteredSales.slice(startIdx, endIdx);
+
+      // 4. 페이지 정보 업데이트
+      const filterApplied = startStr || endStr;
+      const filterLabel = filterApplied ? ' (필터 적용됨)' : '';
+      document.getElementById('pageInfo').textContent =
+        `전체 ${totalCount}건${filterLabel}`;
+      document.getElementById('pageCurrent').textContent =
+        `${currentPage} / ${totalPages}`;
+      document.getElementById('prevBtn').disabled = currentPage <= 1;
+      document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+      document.getElementById('pagination').style.display =
+        totalCount > pageSize ? 'flex' : 'none';
+
+      // 5. 카드 렌더링
       const c = document.getElementById('recentSales');
-      if (!res.success || !res.sales || res.sales.length === 0) {
-        c.innerHTML = '<div class="empty-state">거래 내역 없음</div>';
+      if (pageSales.length === 0) {
+        const msg = filterApplied
+          ? '선택한 날짜 범위에 거래 내역이 없습니다'
+          : '거래 내역 없음';
+        c.innerHTML = `<div class="empty-state">${msg}</div>`;
         return;
       }
       c.innerHTML = `
         <div class="sales-cards">
-          ${res.sales.map(s => renderSaleCard(s)).join('')}
+          ${pageSales.map(s => renderSaleCard(s)).join('')}
         </div>
       `;
+    }
+
+    function onFilterChange() {
+      currentPage = 1;
+      applyFiltersAndRender();
+    }
+
+    function resetDateFilter() {
+      document.getElementById('filterDateStart').value = '';
+      document.getElementById('filterDateEnd').value = '';
+      currentPage = 1;
+      applyFiltersAndRender();
+    }
+
+    function changePageSize(size) {
+      pageSize = size;
+      currentPage = 1;
+      // 활성 버튼 업데이트
+      document.querySelectorAll('.pagesize-btn').forEach(btn => {
+        btn.classList.toggle('active', Number(btn.dataset.size) === size);
+      });
+      applyFiltersAndRender();
+    }
+
+    function changePage(delta) {
+      currentPage += delta;
+      applyFiltersAndRender();
+      // 거래 영역으로 스크롤
+      document.getElementById('recentSales').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function renderSaleCard(s) {
