@@ -58,23 +58,53 @@
     }
     .notice strong { color: #c87500; }
 
-    /* 카테고리 필터 */
-    .cat-filter {
-      display: flex; gap: 6px; padding: 8px 16px;
-      overflow-x: auto;
-      max-width: 600px; margin: 0 auto;
-      -webkit-overflow-scrolling: touch;
+    /* 카테고리 드롭다운 */
+    .cat-section {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 12px 16px 4px;
     }
-    .cat-filter::-webkit-scrollbar { display: none; }
-    .cat-btn {
-      background: white; border: 1px solid #e5e5ea;
-      padding: 7px 14px; border-radius: 16px;
-      font-size: 13px; white-space: nowrap;
+    .cat-wrap {
+      background: white;
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .cat-label {
+      font-size: 13px;
+      font-weight: 600;
       color: #4a4a4f;
+      white-space: nowrap;
     }
-    .cat-btn.active {
-      background: #5856d6; color: white;
-      border-color: #5856d6; font-weight: 600;
+    .cat-select {
+      flex: 1;
+      padding: 8px 32px 8px 12px;
+      border: 1px solid #d1d1d6;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #f9f9fb;
+      color: #1d1d1f;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235856d6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 14px;
+    }
+    .cat-select:focus {
+      outline: none;
+      border-color: #5856d6;
+      background-color: white;
+    }
+    .cat-count {
+      font-size: 11px;
+      color: #8e8e93;
+      white-space: nowrap;
     }
 
     /* 제품 카드 그리드 */
@@ -433,9 +463,14 @@
     </div>
   </div>
 
-  <div class="cat-filter" id="catFilter">
-    <button class="cat-btn active" data-cat="all">전체</button>
-    <!-- 카테고리 동적 추가 -->
+  <div class="cat-section">
+    <div class="cat-wrap">
+      <label class="cat-label">📂 카테고리</label>
+      <select class="cat-select" id="catSelect" onchange="changeCategory(this.value)">
+        <option value="all">전체</option>
+      </select>
+      <span class="cat-count" id="catCount">0개 제품</span>
+    </div>
   </div>
 
   <div class="section" style="padding-top:8px;">
@@ -623,19 +658,25 @@
 
     /* ─── 카테고리 필터 ─── */
     function renderCategories() {
-      const filter = document.getElementById('catFilter');
-      filter.innerHTML = categories.map(cat =>
-        `<button class="cat-btn ${cat === currentCategory ? 'active' : ''}"
-                 data-cat="${escapeAttr(cat)}"
-                 onclick="changeCategory('${escapeAttr(cat)}')">
-          ${cat === 'all' ? '전체' : escapeHtml(cat)}
-         </button>`
-      ).join('');
+      const select = document.getElementById('catSelect');
+      // 카테고리별 제품 수 계산
+      const catCounts = {};
+      allProducts.forEach(p => {
+        const c = p.category || '기타';
+        catCounts[c] = (catCounts[c] || 0) + 1;
+      });
+
+      select.innerHTML = categories.map(cat => {
+        if (cat === 'all') {
+          return `<option value="all"${cat === currentCategory ? ' selected' : ''}>전체 (${allProducts.length}개)</option>`;
+        }
+        const count = catCounts[cat] || 0;
+        return `<option value="${escapeAttr(cat)}"${cat === currentCategory ? ' selected' : ''}>${escapeHtml(cat)} (${count}개)</option>`;
+      }).join('');
     }
 
     function changeCategory(cat) {
       currentCategory = cat;
-      renderCategories();
       renderProducts();
     }
 
@@ -645,6 +686,9 @@
       const filtered = currentCategory === 'all'
         ? allProducts
         : allProducts.filter(p => p.category === currentCategory);
+
+      // 카테고리 카운트 표시 갱신
+      document.getElementById('catCount').textContent = filtered.length + '개 제품';
 
       if (filtered.length === 0) {
         grid.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1;">제품이 없습니다</div>';
