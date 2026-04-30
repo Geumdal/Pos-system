@@ -120,10 +120,10 @@
     }
     .chart-wrapper { position: relative; height: 240px; }
 
-    /* 하단 그리드 */
+    /* 하단 그리드 - 거래 리스트가 더 큰 비중 */
     .bottom-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1.5fr;
       gap: 12px;
     }
 
@@ -157,7 +157,7 @@
       font-size: 13px; font-weight: 600; text-align: right;
     }
 
-    /* 거래 테이블 */
+    /* 거래 테이블 (이전 - 호환용) */
     .sales-table {
       width: 100%; font-size: 12px;
     }
@@ -181,6 +181,130 @@
     .sales-table .method.venmo { background: #d8edf8; color: #1a4f6e; }
     .sales-table .status-refund {
       font-size: 10px; color: #ff3b30; font-weight: 600;
+    }
+
+    /* 거래 카드 리스트 (새 형식) */
+    .sales-cards {
+      display: flex; flex-direction: column; gap: 10px;
+      max-height: 600px; overflow-y: auto;
+      padding-right: 4px;
+    }
+    .sale-card {
+      background: white;
+      border: 1px solid #e5e5ea;
+      border-radius: 10px;
+      padding: 12px 14px;
+      transition: all 0.15s;
+    }
+    .sale-card:hover {
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      border-color: #d1d1d6;
+    }
+    .sale-card.refunded {
+      opacity: 0.5;
+      background: #f5f5f7;
+    }
+    .sale-card.credit {
+      border-left: 3px solid #ff3b30;
+      background: #fffafa;
+    }
+
+    .sale-row1 {
+      display: flex; align-items: center; gap: 10px;
+      flex-wrap: wrap; margin-bottom: 8px;
+    }
+    .sale-date-block {
+      display: flex; flex-direction: column; gap: 1px;
+      min-width: 60px;
+    }
+    .sale-date {
+      font-size: 12px; font-weight: 600; color: #1d1d1f;
+    }
+    .sale-time {
+      font-size: 11px; color: #8e8e93;
+    }
+    .sale-badge {
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 4px 9px; border-radius: 12px;
+      font-size: 11px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .sale-badge.method-cash {
+      background: #d4f4dd; color: #1c7c2f;
+    }
+    .sale-badge.method-venmo {
+      background: #d8edf8; color: #1a4f6e;
+    }
+    .sale-badge.method-credit {
+      background: #fff5f5; color: #c62828;
+      border: 1px solid #ffd5d5;
+    }
+    .sale-badge.refund {
+      background: #ffebee; color: #c62828;
+    }
+    .sale-badge.credit-badge {
+      background: #ff3b30; color: white;
+    }
+    .sale-amount {
+      margin-left: auto;
+      font-size: 16px; font-weight: 700; color: #1d1d1f;
+    }
+    .sale-card.refunded .sale-amount {
+      text-decoration: line-through; color: #8e8e93;
+    }
+
+    .sale-items {
+      display: flex; flex-wrap: wrap; gap: 5px;
+      align-items: center; margin-bottom: 6px;
+    }
+    .sale-item {
+      display: inline-block; padding: 2px 8px;
+      background: #f5f5f7; border-radius: 6px;
+      font-size: 11px; color: #4a4a4f;
+    }
+    .sale-item-more {
+      font-size: 11px; color: #8e8e93; font-weight: 600;
+    }
+    .sale-total-qty {
+      margin-left: auto;
+      font-size: 11px; color: #8e8e93;
+      background: #f0f0f3;
+      padding: 2px 8px; border-radius: 6px;
+    }
+
+    .sale-customer-row {
+      font-size: 11px; color: #4a4a4f;
+      margin-top: 4px; line-height: 1.5;
+    }
+    .sale-customer {
+      display: inline-block;
+      padding: 2px 8px; background: #f0f4f8;
+      border-radius: 6px; color: #1a4f6e;
+    }
+    .sale-change {
+      display: inline-block;
+      padding: 2px 8px; background: #f5f5f7;
+      border-radius: 6px; color: #6e6e73;
+      font-size: 10px;
+    }
+    .sale-note {
+      font-size: 11px; color: #6e6e73;
+      margin-top: 4px; padding: 4px 8px;
+      background: #fff8e5; border-radius: 6px;
+      line-height: 1.5;
+    }
+    .sale-id {
+      font-size: 9px; color: #c7c7cc;
+      margin-top: 6px; font-family: monospace;
+      letter-spacing: 0.3px;
+    }
+
+    @media (max-width: 768px) {
+      .sale-row1 { gap: 6px; }
+      .sale-date-block { min-width: 50px; }
+      .sale-amount { font-size: 14px; }
+      .sale-items { gap: 4px; }
+      .sales-cards { max-height: 500px; }
     }
 
     .empty-state {
@@ -538,9 +662,9 @@
     }
 
     function loadRecentSales() {
-      api('getRecentSales', { limit: 15 })
-        .then(res => { (onRecentSalesLoaded)(res); })
-        .catch(err => { (err => console.error(err))(err); });
+      api('getRecentSales', { limit: 30 })
+        .then(res => { onRecentSalesLoaded(res); })
+        .catch(err => { console.error(err); });
     }
 
     function onRecentSalesLoaded(res) {
@@ -550,30 +674,81 @@
         return;
       }
       c.innerHTML = `
-        <table class="sales-table">
-          <thead>
-            <tr><th>시간</th><th>항목</th><th>결제</th><th class="amt">금액</th></tr>
-          </thead>
-          <tbody>
-            ${res.sales.map(s => {
-              const d = new Date(s.date);
-              const tt = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-              const dd = d.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
-              const methodClass = s.method === '현금' ? 'cash' : 'venmo';
-              const isRefund = s.status === '환불됨';
-              return `
-                <tr style="${isRefund ? 'opacity:0.5; text-decoration:line-through;' : ''}">
-                  <td>${dd} ${tt}</td>
-                  <td>${s.itemCount}종/${s.totalQty}개</td>
-                  <td><span class="method ${methodClass}">${escapeHtml(s.method)}</span>
-                      ${isRefund ? '<div class="status-refund">환불</div>' : ''}</td>
-                  <td class="amt">${fmtUSD(s.amount)}</td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
+        <div class="sales-cards">
+          ${res.sales.map(s => renderSaleCard(s)).join('')}
+        </div>
       `;
+    }
+
+    function renderSaleCard(s) {
+      const d = new Date(s.date);
+      const dateStr = d.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short' });
+      const timeStr = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+      // 결제 방법별 배지 스타일
+      const methodInfo = getMethodBadge(s.method, s.status);
+
+      // 상태 배지
+      const isRefund = s.status === '환불됨';
+      const isCredit = s.status === '외상';
+
+      // 항목 미리보기 (최대 3개)
+      const itemsPreview = (s.items || []).slice(0, 3).map(it =>
+        `<span class="sale-item">${escapeHtml(cleanProductName(it.name))} ×${it.qty}</span>`
+      ).join('');
+      const moreCount = (s.items || []).length - 3;
+      const moreLabel = moreCount > 0 ? `<span class="sale-item-more">+${moreCount}</span>` : '';
+
+      // 고객 정보
+      const customerInfo = s.customerName
+        ? `<span class="sale-customer">👤 ${escapeHtml(s.customerName)}${s.customerPhone ? ' · ' + escapeHtml(s.customerPhone) : ''}</span>`
+        : '';
+
+      // 메모
+      const noteHtml = s.note
+        ? `<div class="sale-note">💬 ${escapeHtml(s.note)}</div>`
+        : '';
+
+      // 거스름돈 표시 (현금만)
+      const changeHtml = (s.method === '현금' && s.change > 0)
+        ? `<span class="sale-change">받음 ${fmtUSD(s.tendered)} · 거스름 ${fmtUSD(s.change)}</span>`
+        : '';
+
+      const cardClass = isRefund ? 'refunded' : (isCredit ? 'credit' : '');
+
+      return `
+        <div class="sale-card ${cardClass}">
+          <div class="sale-row1">
+            <div class="sale-date-block">
+              <span class="sale-date">${dateStr}</span>
+              <span class="sale-time">${timeStr}</span>
+            </div>
+            <span class="sale-badge ${methodInfo.class}">${methodInfo.icon} ${escapeHtml(s.method)}</span>
+            ${isRefund ? '<span class="sale-badge refund">↩️ 환불</span>' : ''}
+            ${isCredit ? '<span class="sale-badge credit-badge">📝 미결제</span>' : ''}
+            <span class="sale-amount">${fmtUSD(s.amount)}</span>
+          </div>
+          <div class="sale-items">
+            ${itemsPreview}${moreLabel}
+            <span class="sale-total-qty">${s.itemCount}종/${s.totalQty}개</span>
+          </div>
+          ${customerInfo ? `<div class="sale-customer-row">${customerInfo}</div>` : ''}
+          ${changeHtml ? `<div class="sale-customer-row">${changeHtml}</div>` : ''}
+          ${noteHtml}
+          <div class="sale-id">${escapeHtml(s.id)}</div>
+        </div>
+      `;
+    }
+
+    function getMethodBadge(method, status) {
+      if (status === '외상' || method === '외상') {
+        return { class: 'method-credit', icon: '📝' };
+      }
+      if (method === 'Venmo' || method === 'venmo') {
+        return { class: 'method-venmo', icon: '💸' };
+      }
+      // 현금
+      return { class: 'method-cash', icon: '💵' };
     }
 
     function escapeHtml(str) {
