@@ -193,6 +193,30 @@ function _injectCustomerPopup() {
         </div>
       </div>
     </div>
+
+    <div class="modal-bd" id="popupPickupModal" onclick="closePopupPickup(event)">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:420px;">
+        <h2 style="margin-bottom:16px;">🛍️ 선주문 픽업 결제</h2>
+        <div id="popupPickupInfo" style="background:#f5f5f7; border-radius:10px; padding:14px; margin-bottom:16px;"></div>
+        <div style="font-size:13px; color:#666; margin-bottom:8px;">결제 방법:</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:14px;">
+          <button class="bulk-pm-btn active" id="popupPickupCash" onclick="selectPopupPickupMethod('현금')">💵 현금</button>
+          <button class="bulk-pm-btn" id="popupPickupVenmo" onclick="selectPopupPickupMethod('Venmo')">💸 Venmo</button>
+          <button class="bulk-pm-btn" id="popupPickupCredit" onclick="selectPopupPickupMethod('외상')" style="background:#fff5f5; color:#c62828;">📝 외상</button>
+        </div>
+        <div id="popupPickupVenmoBox" style="display:none; background:linear-gradient(135deg,#3D95CE,#2a7ab0); color:white; padding:14px 16px; border-radius:12px; margin-bottom:14px; text-align:center;">
+          <div style="font-size:11px; opacity:0.85;">VENMO로 송금</div>
+          <div style="font-size:22px; font-weight:700; margin-top:4px;">@Garden-Church</div>
+        </div>
+        <div id="popupPickupCreditBox" style="display:none; background:#fff5f5; border:1px solid #ffd5d5; padding:12px; border-radius:10px; margin-bottom:14px; font-size:12px; color:#8a3a3a;">
+          ⚠️ 외상으로 처리됩니다. 외상 페이지에서 추후 결제 처리하세요.
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <button class="cust-btn-cancel" onclick="closePopupPickup()">취소</button>
+          <button class="cust-btn-confirm" id="popupPickupBtn" onclick="confirmPopupPickup()" style="background:#34c759;">✅ 픽업 완료</button>
+        </div>
+      </div>
+    </div>
   `;
 
   const css = `
@@ -226,6 +250,17 @@ function _injectCustomerPopup() {
         font-weight: 600; font-size: 13px; margin-left: 8px;
         white-space: nowrap;
       }
+      .cust-tx-right {
+        display: flex; flex-direction: column; gap: 4px;
+        align-items: flex-end; margin-left: 8px;
+      }
+      .cust-pickup-btn {
+        padding: 4px 10px; background: #34c759; color: white;
+        border: none; border-radius: 6px; font-size: 11px;
+        font-weight: 600; cursor: pointer; font-family: inherit;
+        white-space: nowrap;
+      }
+      .cust-pickup-btn:hover { background: #2ea043; }
       .cust-summary-grid {
         display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
         margin-bottom: 14px;
@@ -328,14 +363,24 @@ function _renderCustomerPopup(res) {
       const dateStr = date.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       const itemNames = (it.items || []).map(x => `${cleanProductName(x.name)}×${x.qty}`).join(', ') || '-';
       const amt = type === 'preorder' ? it.totalAmount : it.amount;
+      const id = type === 'preorder' ? it.preorderId : it.saleId;
+
+      // 예약중 선주문에는 픽업 버튼 추가
+      const pickupBtn = (type === 'preorder' && it.status === '예약중')
+        ? `<button class="cust-pickup-btn" onclick="openPickupFromPopup('${escapeAttr(id)}', ${amt}); event.stopPropagation();">🛍️ 픽업 결제</button>`
+        : '';
+
       return `
         <div class="cust-tx-row">
           <div class="cust-tx-info">
-            <div class="cust-tx-date">${dateStr}${type === 'sale' ? ' · ' + escapeHtml(it.method) : ''}</div>
+            <div class="cust-tx-date">${dateStr}${type === 'sale' ? ' · ' + escapeHtml(it.method) : ''}${type === 'preorder' && it.pickupDate ? ' · 픽업예정 ' + escapeHtml(it.pickupDate) : ''}</div>
             <div class="cust-tx-items" title="${escapeHtml(itemNames)}">${escapeHtml(itemNames)}</div>
             ${it.note ? `<div style="font-size:10px; color:#8e8e93; margin-top:2px;">💬 ${escapeHtml(it.note)}</div>` : ''}
           </div>
-          <div class="cust-tx-amount">${fmtUSD(amt)}</div>
+          <div class="cust-tx-right">
+            <div class="cust-tx-amount">${fmtUSD(amt)}</div>
+            ${pickupBtn}
+          </div>
         </div>
       `;
     }).join('');
@@ -476,6 +521,91 @@ async function confirmBulkPay() {
     if (res.success) {
       showToast(`✅ ${res.paidCount}건 일괄 결제 완료 (${fmtUSD(res.totalAmount)})`, 'success');
       closeBulkPay();
+      // 팝업 다시 로드
+      showCustomerPopup(_currentCustomerPhone, _currentCustomerCallback);
+      // 페이지 새로고침 콜백
+      if (_currentCustomerCallback) _currentCustomerCallback();
+    } else {
+      showToast(res.message || '실패', 'error');
+    }
+  } catch (err) {
+    showToast('오류: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+
+/* ─── 팝업 내 선주문 픽업 결제 ─── */
+let _currentPickupPreorderId = null;
+let _currentPickupAmount = 0;
+let _currentPickupMethod = '현금';
+
+function openPickupFromPopup(preorderId, amount) {
+  _currentPickupPreorderId = preorderId;
+  _currentPickupAmount = Number(amount) || 0;
+  _currentPickupMethod = '현금';
+
+  document.getElementById('popupPickupInfo').innerHTML = `
+    <div style="font-size:13px; color:#8e8e93;">예약번호</div>
+    <div style="font-size:13px; font-family:monospace; margin-bottom:8px;">${escapeHtml(preorderId)}</div>
+    <div style="font-size:13px; color:#8e8e93;">결제 금액</div>
+    <div style="font-size:24px; font-weight:700; color:#34c759;">${fmtUSD(_currentPickupAmount)}</div>
+  `;
+  document.getElementById('popupPickupVenmoBox').style.display = 'none';
+  document.getElementById('popupPickupCreditBox').style.display = 'none';
+  _updatePopupPickupButtons();
+  document.getElementById('popupPickupModal').classList.add('active');
+}
+
+function closePopupPickup(e) {
+  if (e && e.target && e.target.id !== 'popupPickupModal') return;
+  document.getElementById('popupPickupModal').classList.remove('active');
+}
+
+function selectPopupPickupMethod(m) {
+  _currentPickupMethod = m;
+  document.getElementById('popupPickupVenmoBox').style.display = m === 'Venmo' ? 'block' : 'none';
+  document.getElementById('popupPickupCreditBox').style.display = m === '외상' ? 'block' : 'none';
+  _updatePopupPickupButtons();
+}
+
+function _updatePopupPickupButtons() {
+  document.getElementById('popupPickupCash').classList.toggle('active', _currentPickupMethod === '현금');
+  document.getElementById('popupPickupVenmo').classList.toggle('active', _currentPickupMethod === 'Venmo');
+  document.getElementById('popupPickupCredit').classList.toggle('active', _currentPickupMethod === '외상');
+
+  // 외상 강조
+  const creditBtn = document.getElementById('popupPickupCredit');
+  if (_currentPickupMethod === '외상') {
+    creditBtn.style.background = '#ff3b30';
+    creditBtn.style.color = 'white';
+    creditBtn.style.borderColor = '#ff3b30';
+  } else {
+    creditBtn.style.background = '#fff5f5';
+    creditBtn.style.color = '#c62828';
+    creditBtn.style.borderColor = 'transparent';
+  }
+}
+
+async function confirmPopupPickup() {
+  const btn = document.getElementById('popupPickupBtn');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '처리 중...';
+
+  try {
+    const res = await api('pickupPreorder', {
+      preorderId: _currentPickupPreorderId,
+      payment: {
+        method: _currentPickupMethod,
+        tendered: _currentPickupAmount  // 정확 금액
+      }
+    });
+    if (res.success) {
+      showToast(`✅ 픽업 완료 (${_currentPickupMethod})`, 'success');
+      closePopupPickup();
       // 팝업 다시 로드
       showCustomerPopup(_currentCustomerPhone, _currentCustomerCallback);
       // 페이지 새로고침 콜백
