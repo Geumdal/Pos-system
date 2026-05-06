@@ -301,7 +301,7 @@
       }
       header .menu, header .nav {
         display: grid;
-        grid-template-columns: repeat(8, 1fr);
+        grid-template-columns: repeat(9, 1fr);
         gap: 3px;
         width: 100%;
       }
@@ -483,6 +483,7 @@
     }
   </style>
 <script src="config.js"></script>
+  <script src="assets/auth.js"></script>
   <script src="assets/api.js"></script>
 </head>
 <body>
@@ -497,6 +498,7 @@
       <a class="header-btn" href="outstanding.html"><span class="hb-icon">📝</span><span class="hb-label">외상</span></a>
       <a class="header-btn" href="preorder.html"><span class="hb-icon">📅</span><span class="hb-label">선주문</span></a>
       <a class="header-btn" href="customers.html"><span class="hb-icon">👥</span><span class="hb-label">고객</span></a>
+      <button class="header-btn" onclick="adminLogout()" title="로그아웃" style="cursor:pointer;"><span class="hb-icon">🚪</span><span class="hb-label">로그아웃</span></button>
     </div>
   </header>
 
