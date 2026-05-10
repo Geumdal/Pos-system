@@ -487,7 +487,9 @@
   </header>
 
   <div class="content">
-    <div class="action-row" style="display:flex; justify-content:flex-end; gap: 8px; margin-bottom:8px;">
+    <div class="action-row" style="display:flex; justify-content:flex-end; gap: 8px; margin-bottom:8px; flex-wrap: wrap;">
+      <button class="nav-btn" onclick="openChangePwModal()"
+              style="background:#5856d6; color:white;">🔑 비밀번호 변경</button>
       <button class="nav-btn" onclick="openResetModal()"
               style="background:#ff3b30; color:white;">🗑️ 데이터 초기화</button>
       <button class="nav-btn primary" onclick="loadStats()" style="background:#007aff; color:white;">🔄 새로고침</button>
@@ -564,6 +566,7 @@
             <button class="pagesize-btn" data-size="10" onclick="changePageSize(10)">10</button>
             <button class="pagesize-btn" data-size="20" onclick="changePageSize(20)">20</button>
             <button class="pagesize-btn" data-size="50" onclick="changePageSize(50)">50</button>
+            <button class="pagesize-btn" data-size="all" onclick="changePageSize('all')">전체</button>
           </div>
         </div>
 
@@ -761,8 +764,8 @@
     let pageSize = 5;
 
     function loadRecentSales() {
-      // 충분히 큰 limit으로 한번 받아와서 클라이언트 필터링
-      api('getRecentSales', { limit: 200 })
+      // 충분히 큰 limit으로 한번 받아와서 클라이언트 필터링 ("전체" 모드 지원)
+      api('getRecentSales', { limit: 5000 })
         .then(res => { onRecentSalesLoaded(res); })
         .catch(err => { console.error(err); });
     }
@@ -798,15 +801,17 @@
         return true;
       });
 
-      // 2. 페이지 계산
+      // 2. 페이지 계산 (전체 모드 지원)
       const totalCount = filteredSales.length;
-      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      const isShowAll = pageSize === 'all';
+      const effectivePageSize = isShowAll ? Math.max(totalCount, 1) : pageSize;
+      const totalPages = Math.max(1, Math.ceil(totalCount / effectivePageSize));
       if (currentPage > totalPages) currentPage = totalPages;
       if (currentPage < 1) currentPage = 1;
 
       // 3. 현재 페이지 슬라이스
-      const startIdx = (currentPage - 1) * pageSize;
-      const endIdx = startIdx + pageSize;
+      const startIdx = isShowAll ? 0 : (currentPage - 1) * pageSize;
+      const endIdx = isShowAll ? totalCount : startIdx + pageSize;
       const pageSales = filteredSales.slice(startIdx, endIdx);
 
       // 4. 페이지 정보 업데이트
@@ -818,8 +823,9 @@
         `${currentPage} / ${totalPages}`;
       document.getElementById('prevBtn').disabled = currentPage <= 1;
       document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+      // 전체 모드일 때는 페이지네이션 숨김
       document.getElementById('pagination').style.display =
-        totalCount > pageSize ? 'flex' : 'none';
+        (!isShowAll && totalCount > pageSize) ? 'flex' : 'none';
 
       // 5. 카드 렌더링
       const c = document.getElementById('recentSales');
@@ -852,9 +858,10 @@
     function changePageSize(size) {
       pageSize = size;
       currentPage = 1;
-      // 활성 버튼 업데이트
+      // 활성 버튼 업데이트 ('all' 도 문자열로 비교)
       document.querySelectorAll('.pagesize-btn').forEach(btn => {
-        btn.classList.toggle('active', Number(btn.dataset.size) === size);
+        const btnSize = btn.dataset.size === 'all' ? 'all' : Number(btn.dataset.size);
+        btn.classList.toggle('active', btnSize === size);
       });
       applyFiltersAndRender();
     }
@@ -953,6 +960,62 @@
     }
   </script>
 
+  <!-- 비밀번호 변경 모달 -->
+  <div id="changePwModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center; padding:20px;" onclick="closeChangePwModalOnBg(event)">
+    <div style="background:white; border-radius:16px; padding:24px; max-width:440px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.3); position:relative;">
+      <button onclick="closeChangePwModal()" style="position:absolute; top:12px; right:12px; width:32px; height:32px; background:#f5f5f7; border:none; border-radius:50%; font-size:18px; cursor:pointer; color:#1d1d1f;">×</button>
+
+      <div style="text-align:center; margin-bottom:20px;">
+        <div style="font-size:48px; margin-bottom:8px;">🔑</div>
+        <h2 style="font-size:20px; font-weight:700; color:#5856d6; margin:0 0 4px;">관리자 비밀번호 변경</h2>
+        <div style="font-size:13px; color:#8e8e93;">모든 기기에 즉시 적용됩니다</div>
+      </div>
+
+      <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:12px; margin-bottom:16px;">
+        <div style="font-size:12px; color:#92400e; line-height:1.6;">
+          💡 <strong>안내:</strong> 비밀번호 변경 후 다른 회계 담당자도 새 비밀번호로 로그인해야 합니다.
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <label style="display:block; font-size:13px; font-weight:600; color:#1d1d1f; margin-bottom:6px;">
+          현재 비밀번호
+        </label>
+        <input type="password" id="currentPw" placeholder="현재 비밀번호 입력..." autocomplete="current-password"
+               style="width:100%; padding:12px 14px; border:1px solid #e5e5ea; border-radius:8px; font-size:14px; font-family:inherit; box-sizing:border-box;">
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <label style="display:block; font-size:13px; font-weight:600; color:#1d1d1f; margin-bottom:6px;">
+          새 비밀번호 <span style="color:#8e8e93; font-weight:400;">(4-50자)</span>
+        </label>
+        <input type="password" id="newPw" placeholder="새 비밀번호 입력..." autocomplete="new-password" minlength="4" maxlength="50"
+               style="width:100%; padding:12px 14px; border:1px solid #e5e5ea; border-radius:8px; font-size:14px; font-family:inherit; box-sizing:border-box;">
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <label style="display:block; font-size:13px; font-weight:600; color:#1d1d1f; margin-bottom:6px;">
+          새 비밀번호 확인
+        </label>
+        <input type="password" id="confirmPw" placeholder="새 비밀번호 다시 입력..." autocomplete="new-password" minlength="4" maxlength="50"
+               style="width:100%; padding:12px 14px; border:1px solid #e5e5ea; border-radius:8px; font-size:14px; font-family:inherit; box-sizing:border-box;">
+      </div>
+
+      <div id="changePwError" style="font-size:13px; color:#ff3b30; text-align:center; margin-bottom:12px; min-height:18px;"></div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <button onclick="closeChangePwModal()"
+                style="padding:12px; background:#e5e5ea; color:#1d1d1f; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit;">
+          취소
+        </button>
+        <button id="changePwBtn" onclick="confirmChangePw()"
+                style="padding:12px; background:#5856d6; color:white; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit;">
+          🔑 변경하기
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- 데이터 초기화 모달 -->
   <div id="resetModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center;">
     <div style="background:white; border-radius:16px; padding:24px; max-width:440px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
@@ -1015,6 +1078,99 @@
   <div id="toast" style="position:fixed; top:24px; left:50%; transform:translateX(-50%); padding:12px 24px; border-radius:8px; color:white; font-size:14px; z-index:10000; opacity:0; transition:opacity 0.3s;"></div>
 
   <script>
+    /* ─── 토스트 ─── */
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = type === 'error' ? '#ff3b30' : '#34c759';
+      t.style.opacity = '1';
+      setTimeout(() => { t.style.opacity = '0'; }, 2800);
+    }
+
+    /* ─── 비밀번호 변경 ─── */
+    function openChangePwModal() {
+      document.getElementById('currentPw').value = '';
+      document.getElementById('newPw').value = '';
+      document.getElementById('confirmPw').value = '';
+      document.getElementById('changePwError').textContent = '';
+      document.getElementById('changePwModal').style.display = 'flex';
+      setTimeout(() => document.getElementById('currentPw').focus(), 100);
+    }
+
+    function closeChangePwModal() {
+      document.getElementById('changePwModal').style.display = 'none';
+    }
+
+    function closeChangePwModalOnBg(event) {
+      if (event.target.id === 'changePwModal') closeChangePwModal();
+    }
+
+    async function confirmChangePw() {
+      const errEl = document.getElementById('changePwError');
+      errEl.textContent = '';
+
+      const currentPw = document.getElementById('currentPw').value;
+      const newPw = document.getElementById('newPw').value;
+      const confirmPw = document.getElementById('confirmPw').value;
+
+      if (!currentPw) {
+        errEl.textContent = '현재 비밀번호를 입력하세요';
+        document.getElementById('currentPw').focus();
+        return;
+      }
+      if (!newPw) {
+        errEl.textContent = '새 비밀번호를 입력하세요';
+        document.getElementById('newPw').focus();
+        return;
+      }
+      if (newPw.length < 4) {
+        errEl.textContent = '새 비밀번호는 4자 이상이어야 합니다';
+        document.getElementById('newPw').focus();
+        return;
+      }
+      if (newPw.length > 50) {
+        errEl.textContent = '새 비밀번호는 50자 이하로 입력하세요';
+        document.getElementById('newPw').focus();
+        return;
+      }
+      if (newPw !== confirmPw) {
+        errEl.textContent = '새 비밀번호가 일치하지 않습니다';
+        document.getElementById('confirmPw').focus();
+        return;
+      }
+      if (newPw === currentPw) {
+        errEl.textContent = '새 비밀번호가 현재 비밀번호와 같습니다';
+        document.getElementById('newPw').focus();
+        return;
+      }
+
+      const btn = document.getElementById('changePwBtn');
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ 변경 중...';
+      btn.style.opacity = '0.7';
+
+      try {
+        const res = await api('changeAdminPassword', {
+          currentPassword: currentPw,
+          newPassword: newPw
+        });
+
+        if (res.success) {
+          closeChangePwModal();
+          showToast('✅ 비밀번호가 변경되었습니다', 'success');
+        } else {
+          errEl.textContent = '❌ ' + (res.message || '변경 실패');
+        }
+      } catch (err) {
+        errEl.textContent = '❌ 오류: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+        btn.style.opacity = '1';
+      }
+    }
+
     function openResetModal() {
       document.getElementById('resetConfirmInput').value = '';
       document.getElementById('resetConfirmBtn').disabled = true;
