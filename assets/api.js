@@ -204,6 +204,34 @@ function _injectCustomerPopup() {
           <button class="bulk-pm-btn" id="popupPickupVenmo" onclick="selectPopupPickupMethod('Venmo')">💸 Venmo</button>
           <button class="bulk-pm-btn" id="popupPickupCredit" onclick="selectPopupPickupMethod('외상')" style="background:#fff5f5; color:#c62828;">📝 외상</button>
         </div>
+
+        <div id="popupPickupCashBox" style="background:#f0fdf4; border:1px solid #bbf7d0; padding:14px; border-radius:12px; margin-bottom:14px;">
+          <div style="font-size:13px; color:#1c7c2f; font-weight:600; margin-bottom:8px;">💵 현금 받은 금액</div>
+          <input type="number" id="popupPickupTendered" placeholder="받은 금액 입력 (예: 100)" min="0" step="0.01"
+                 oninput="updatePopupPickupChange()"
+                 style="width:100%; padding:12px 14px; border:1px solid #bbf7d0; border-radius:8px; font-size:16px; font-family:inherit; box-sizing:border-box; background:white;">
+          <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+            <button type="button" onclick="setPopupPickupTendered('exact')" style="padding:6px 12px; background:white; border:1px solid #bbf7d0; border-radius:6px; font-size:12px; cursor:pointer; color:#1c7c2f; font-weight:600; font-family:inherit;">정확히</button>
+            <button type="button" onclick="setPopupPickupTendered(20)" style="padding:6px 12px; background:white; border:1px solid #bbf7d0; border-radius:6px; font-size:12px; cursor:pointer; color:#1c7c2f; font-family:inherit;">$20</button>
+            <button type="button" onclick="setPopupPickupTendered(50)" style="padding:6px 12px; background:white; border:1px solid #bbf7d0; border-radius:6px; font-size:12px; cursor:pointer; color:#1c7c2f; font-family:inherit;">$50</button>
+            <button type="button" onclick="setPopupPickupTendered(100)" style="padding:6px 12px; background:white; border:1px solid #bbf7d0; border-radius:6px; font-size:12px; cursor:pointer; color:#1c7c2f; font-family:inherit;">$100</button>
+          </div>
+          <div id="popupPickupChangeBox" style="margin-top:12px; padding:10px 12px; background:white; border-radius:8px; display:none;">
+            <div style="display:flex; justify-content:space-between; font-size:13px; color:#8e8e93;">
+              <span>받은 금액:</span>
+              <span id="popupPickupTenderedDisplay" style="font-weight:600; color:#1d1d1f;">$0.00</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:13px; color:#8e8e93; margin-top:4px;">
+              <span>결제 금액:</span>
+              <span id="popupPickupAmountDisplay" style="font-weight:600; color:#1d1d1f;">$0.00</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:16px; font-weight:700; margin-top:8px; padding-top:8px; border-top:1px solid #f0fdf4;">
+              <span id="popupPickupChangeLabel" style="color:#1c7c2f;">💰 거스름돈:</span>
+              <span id="popupPickupChangeDisplay" style="color:#1c7c2f;">$0.00</span>
+            </div>
+          </div>
+        </div>
+
         <div id="popupPickupVenmoBox" style="display:none; background:linear-gradient(135deg,#3D95CE,#2a7ab0); color:white; padding:14px 16px; border-radius:12px; margin-bottom:14px; text-align:center;">
           <div style="font-size:11px; opacity:0.85;">VENMO로 송금</div>
           <div style="font-size:22px; font-weight:700; margin-top:4px;">@Garden-Church</div>
@@ -610,6 +638,9 @@ function openPickupFromPopup(preorderId, amount) {
   `;
   document.getElementById('popupPickupVenmoBox').style.display = 'none';
   document.getElementById('popupPickupCreditBox').style.display = 'none';
+  document.getElementById('popupPickupCashBox').style.display = 'block';
+  document.getElementById('popupPickupTendered').value = '';
+  document.getElementById('popupPickupChangeBox').style.display = 'none';
   _updatePopupPickupButtons();
   document.getElementById('popupPickupModal').classList.add('active');
 }
@@ -621,9 +652,51 @@ function closePopupPickup(e) {
 
 function selectPopupPickupMethod(m) {
   _currentPickupMethod = m;
+  document.getElementById('popupPickupCashBox').style.display = m === '현금' ? 'block' : 'none';
   document.getElementById('popupPickupVenmoBox').style.display = m === 'Venmo' ? 'block' : 'none';
   document.getElementById('popupPickupCreditBox').style.display = m === '외상' ? 'block' : 'none';
   _updatePopupPickupButtons();
+}
+
+/* 현금 받은 금액 빠른 입력 */
+function setPopupPickupTendered(amount) {
+  const input = document.getElementById('popupPickupTendered');
+  if (amount === 'exact') {
+    input.value = _currentPickupAmount.toFixed(2);
+  } else {
+    input.value = Number(amount).toFixed(2);
+  }
+  updatePopupPickupChange();
+}
+
+/* 거스름돈 계산 */
+function updatePopupPickupChange() {
+  const tendered = Number(document.getElementById('popupPickupTendered').value) || 0;
+  const change = tendered - _currentPickupAmount;
+  const box = document.getElementById('popupPickupChangeBox');
+
+  if (tendered <= 0) {
+    box.style.display = 'none';
+    return;
+  }
+
+  box.style.display = 'block';
+  document.getElementById('popupPickupTenderedDisplay').textContent = fmtUSD(tendered);
+  document.getElementById('popupPickupAmountDisplay').textContent = fmtUSD(_currentPickupAmount);
+
+  const changeEl = document.getElementById('popupPickupChangeDisplay');
+  const labelEl = document.getElementById('popupPickupChangeLabel');
+  if (change < 0) {
+    changeEl.textContent = fmtUSD(Math.abs(change));
+    changeEl.style.color = '#ff3b30';
+    labelEl.textContent = '⚠️ 부족:';
+    labelEl.style.color = '#ff3b30';
+  } else {
+    changeEl.textContent = fmtUSD(change);
+    changeEl.style.color = '#1c7c2f';
+    labelEl.textContent = '💰 거스름돈:';
+    labelEl.style.color = '#1c7c2f';
+  }
 }
 
 function _updatePopupPickupButtons() {
@@ -647,6 +720,32 @@ function _updatePopupPickupButtons() {
 async function confirmPopupPickup() {
   const btn = document.getElementById('popupPickupBtn');
   const original = btn.textContent;
+
+  // 현금/Venmo일 때 받은 금액 검증 + 부분 결제 옵션
+  let tenderedAmount = _currentPickupAmount;
+  let isPartial = false;
+
+  if (_currentPickupMethod === '현금' || _currentPickupMethod === 'Venmo') {
+    const input = document.getElementById('popupPickupTendered').value;
+    if (input && Number(input) > 0) {
+      tenderedAmount = Number(input);
+      if (tenderedAmount < _currentPickupAmount) {
+        const remain = _currentPickupAmount - tenderedAmount;
+        if (!confirm(
+          `받은 금액이 결제 금액보다 부족합니다.\n\n` +
+          `결제 총액: ${fmtUSD(_currentPickupAmount)}\n` +
+          `받은 금액: ${fmtUSD(tenderedAmount)}\n` +
+          `외상 등록: ${fmtUSD(remain)}\n\n` +
+          `[확인] 부분 결제로 처리 (잔액 외상 자동 등록)\n` +
+          `[취소] 취소`
+        )) {
+          return;
+        }
+        isPartial = true;
+      }
+    }
+  }
+
   btn.disabled = true;
   btn.textContent = '처리 중...';
 
@@ -655,11 +754,19 @@ async function confirmPopupPickup() {
       preorderId: _currentPickupPreorderId,
       payment: {
         method: _currentPickupMethod,
-        tendered: _currentPickupAmount  // 정확 금액
+        tendered: tenderedAmount,
+        partialPay: isPartial
       }
     });
     if (res.success) {
-      showToast(`✅ 픽업 완료 (${_currentPickupMethod})`, 'success');
+      let msg = `✅ 픽업 완료 (${_currentPickupMethod})`;
+      if (isPartial && res.partialPayment) {
+        msg = `✅ 부분 결제 · 받음 ${fmtUSD(res.partialPayment.paid)} · 외상 ${fmtUSD(res.partialPayment.outstanding)}`;
+      } else if (_currentPickupMethod === '현금' && tenderedAmount > _currentPickupAmount) {
+        const change = tenderedAmount - _currentPickupAmount;
+        msg += ` · 거스름돈 ${fmtUSD(change)}`;
+      }
+      showToast(msg, 'success');
       closePopupPickup();
       // 팝업 다시 로드
       showCustomerPopup(_currentCustomerPhone, _currentCustomerCallback);
