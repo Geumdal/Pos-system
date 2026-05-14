@@ -1048,7 +1048,18 @@
 
     /* ─── 선주문 영구 삭제 / 전체 초기화 ─── */
     async function deletePreorderRow(preorderId, customerName, amount) {
-      if (!confirm(`선주문을 영구 삭제하시겠어요?\n\n👤 ${customerName}\n📅 ${preorderId}\n💰 ${fmtUSD(amount)}\n\n⚠️ 예약중이면 재고가 자동 복원됩니다.\n⚠️ 이 작업은 되돌릴 수 없습니다.`)) return;
+      if (!confirm(
+        `선주문을 영구 삭제하시겠어요?\n\n` +
+        `👤 ${customerName}\n` +
+        `📅 ${preorderId}\n` +
+        `💰 ${fmtUSD(amount)}\n\n` +
+        `⚠️ 작업 내역:\n` +
+        `  • 선주문 + 항목 영구 삭제\n` +
+        `  • 예약중이면 재고 자동 복원\n` +
+        `  • 픽업완료된 경우 연결된 Sales 거래도 삭제\n` +
+        `  • 관련 외상도 함께 정리\n\n` +
+        `이 작업은 되돌릴 수 없습니다.`
+      )) return;
 
       try {
         const res = await api('deletePreorder', { preorderId: preorderId });

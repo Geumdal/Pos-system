@@ -558,12 +558,20 @@
 
     /* ─── 삭제 / 초기화 ─── */
     async function deleteOne(saleId, customerName, amount) {
-      if (!confirm(`외상 기록을 삭제하시겠어요?\n\n👤 ${customerName}\n💰 ${fmtUSD(amount)}\n\n⚠️ 이 작업은 되돌릴 수 없습니다.`)) return;
+      const isPartial = String(saleId).endsWith('-OUT');
+      const confirmMsg = isPartial
+        ? `부분결제 잔액 외상을 삭제하시겠어요?\n\n👤 ${customerName}\n💰 잔액 ${fmtUSD(amount)}\n\n원래 거래(부분결제 매출)는 그대로 유지됩니다.\n이 작업은 되돌릴 수 없습니다.`
+        : `외상 기록을 삭제하시겠어요?\n\n👤 ${customerName}\n💰 ${fmtUSD(amount)}\n\n⚠️ 작업 내역:\n  • 외상 기록 삭제\n  • 연결된 Sales 거래도 삭제됨\n  • 재고 자동 복원\n  • 선주문이었으면 '예약중'으로 복원\n\n이 작업은 되돌릴 수 없습니다.`;
+
+      if (!confirm(confirmMsg)) return;
 
       try {
         const res = await api('deleteOutstanding', { saleId: saleId });
         if (res.success) {
-          showToast('🗑️ 외상 기록 삭제 완료', 'success');
+          let msg = '🗑️ 외상 기록 삭제 완료';
+          if (res.deletedSale) msg += ' · Sales 거래도 삭제됨';
+          if (res.restoredItems > 0) msg += ` · 재고 ${res.restoredItems}개 복원`;
+          showToast(msg, 'success');
           loadOutstanding();
         } else {
           showToast(res.message || '삭제 실패', 'error');
