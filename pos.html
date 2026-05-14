@@ -1427,10 +1427,19 @@
         partialBox.style.display = 'block';
         document.getElementById('partialPaidDisplay').textContent = fmtUSD(tendered);
         document.getElementById('partialOutstandingDisplay').textContent = fmtUSD(total - tendered);
-        // 부분 결제 가능: 고객명이 있으면 활성화
+
+        // 부분 결제 시 고객 정보 영역 자동 펼침
+        const customerDetails = document.getElementById('customerDetails');
+        if (customerDetails && !customerDetails.open) {
+          customerDetails.open = true;
+        }
+
+        // 고객명 있으면 활성화, 없으면 비활성화 + 명확한 안내
         const name = document.getElementById('customerName').value.trim();
         btn.disabled = !name;
-        btn.textContent = name ? '✅ 부분 결제 (잔액 외상)' : '결제 완료';
+        btn.textContent = name
+          ? '✅ 부분 결제 (잔액 외상)'
+          : '⚠️ 고객명을 입력하세요 (외상 등록용)';
       } else {
         partialBox.style.display = 'none';
         btn.disabled = (tendered < total);
@@ -1438,10 +1447,9 @@
       }
     }
 
-    // 고객명 입력 시 외상/선주문 버튼 활성화 체크
+    // 고객명 입력 시 결제 버튼 상태 즉시 갱신 (외상/선주문 + 부분 결제 모두)
     document.addEventListener('input', (e) => {
-      if (e.target && e.target.id === 'customerName' &&
-          (payMethod === '외상' || payMethod === '선주문')) {
+      if (e.target && e.target.id === 'customerName') {
         calcChange();
       }
     });
