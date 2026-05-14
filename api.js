@@ -721,16 +721,27 @@ async function confirmPopupPickup() {
   const btn = document.getElementById('popupPickupBtn');
   const original = btn.textContent;
 
-  // 현금일 때 받은 금액 검증
+  // 현금/Venmo일 때 받은 금액 검증 + 부분 결제 옵션
   let tenderedAmount = _currentPickupAmount;
-  if (_currentPickupMethod === '현금') {
+  let isPartial = false;
+
+  if (_currentPickupMethod === '현금' || _currentPickupMethod === 'Venmo') {
     const input = document.getElementById('popupPickupTendered').value;
     if (input && Number(input) > 0) {
       tenderedAmount = Number(input);
       if (tenderedAmount < _currentPickupAmount) {
-        if (!confirm(`받은 금액(${fmtUSD(tenderedAmount)})이 결제 금액(${fmtUSD(_currentPickupAmount)})보다 적습니다.\n그대로 처리하시겠어요?`)) {
+        const remain = _currentPickupAmount - tenderedAmount;
+        if (!confirm(
+          `받은 금액이 결제 금액보다 부족합니다.\n\n` +
+          `결제 총액: ${fmtUSD(_currentPickupAmount)}\n` +
+          `받은 금액: ${fmtUSD(tenderedAmount)}\n` +
+          `외상 등록: ${fmtUSD(remain)}\n\n` +
+          `[확인] 부분 결제로 처리 (잔액 외상 자동 등록)\n` +
+          `[취소] 취소`
+        )) {
           return;
         }
+        isPartial = true;
       }
     }
   }
@@ -743,12 +754,15 @@ async function confirmPopupPickup() {
       preorderId: _currentPickupPreorderId,
       payment: {
         method: _currentPickupMethod,
-        tendered: tenderedAmount
+        tendered: tenderedAmount,
+        partialPay: isPartial
       }
     });
     if (res.success) {
       let msg = `✅ 픽업 완료 (${_currentPickupMethod})`;
-      if (_currentPickupMethod === '현금' && tenderedAmount > _currentPickupAmount) {
+      if (isPartial && res.partialPayment) {
+        msg = `✅ 부분 결제 · 받음 ${fmtUSD(res.partialPayment.paid)} · 외상 ${fmtUSD(res.partialPayment.outstanding)}`;
+      } else if (_currentPickupMethod === '현금' && tenderedAmount > _currentPickupAmount) {
         const change = tenderedAmount - _currentPickupAmount;
         msg += ` · 거스름돈 ${fmtUSD(change)}`;
       }

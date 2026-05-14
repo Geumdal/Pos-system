@@ -100,6 +100,10 @@ const API_FUNCTIONS = {
   // 비밀번호 관리
   verifyAdminPassword:   (p) => verifyAdminPassword(p),
   changeAdminPassword:   (p) => changeAdminPassword(p),
+  // 거래 편집/삭제
+  getSaleDetail:         (p) => getSaleDetail(p),
+  updateSale:            (p) => updateSale(p),
+  deleteSale:            (p) => deleteSale(p),
   // 메타
   ping:                  () => ({ success: true, time: new Date().toISOString(), version: 'api-v1' })
 };
@@ -316,12 +320,32 @@ function processSale(items, payment) {
     const customerName  = payment.customerName ? String(payment.customerName).trim() : '';
     const customerPhone = payment.customerPhone ? String(payment.customerPhone).trim() : '';
 
+    // 부분 결제 감지
+    let isPartialPayment = false;
+    let partialPaidAmount = 0;
+    let partialOutstandingAmount = 0;
+
     // 외상이 아닐 경우만 받은 금액 검증
     if (method !== '외상' && tendered < totalAmount) {
-      return {
-        success: false,
-        message: `받은 금액이 부족합니다 (총액 $${totalAmount.toFixed(2)}, 받음 $${tendered.toFixed(2)})`
-      };
+      if (payment.partialPay === true && tendered > 0) {
+        // 부분 결제 처리
+        isPartialPayment = true;
+        partialPaidAmount = tendered;
+        partialOutstandingAmount = totalAmount - tendered;
+
+        // 외상 처리에는 고객명 필수
+        if (!customerName) {
+          return {
+            success: false,
+            message: '부분 결제 시 차액이 외상으로 등록되므로 고객명이 필수입니다.'
+          };
+        }
+      } else {
+        return {
+          success: false,
+          message: `받은 금액이 부족합니다 (총액 $${totalAmount.toFixed(2)}, 받음 $${tendered.toFixed(2)})`
+        };
+      }
     }
 
     // 외상은 고객명 필수
@@ -343,12 +367,24 @@ function processSale(items, payment) {
       productsSheet.getRange(v.rowIdx + 1, 5).setValue(v.newStock);
     }
 
-    // 5단계: Sales 시트 기록 (확장된 컬럼: 9~12 = 상태, 메모, 고객명, 고객연락처)
-    const status = method === '외상' ? '외상' : '완료';
+    // 5단계: Sales 시트 기록
+    let saleAmount, saleStatus, saleNote;
+    if (isPartialPayment) {
+      // 부분 결제: 받은 금액만 매출, 차액은 외상으로 별도
+      saleAmount = partialPaidAmount;
+      saleStatus = '완료';
+      saleNote = `[부분결제 $${partialPaidAmount.toFixed(2)}/${totalAmount.toFixed(2)}] ${note}`.trim();
+    } else {
+      saleAmount = totalAmount;
+      saleStatus = method === '외상' ? '외상' : '완료';
+      saleNote = note;
+    }
+
     salesSheet.appendRow([
       saleId, now, validated.length, totalQuantity,
-      totalAmount, method, tendered, change, status,
-      note, customerName, customerPhone
+      saleAmount, method, isPartialPayment ? partialPaidAmount : tendered,
+      isPartialPayment ? 0 : change, saleStatus,
+      saleNote, customerName, customerPhone
     ]);
 
     // 6단계: SaleItems 추가
@@ -356,17 +392,37 @@ function processSale(items, payment) {
     saleItemsSheet.getRange(saleItemsSheet.getLastRow() + 1, 1, itemRows.length, 6)
       .setValues(itemRows);
 
-    // 7단계: 외상이면 Outstanding 시트에도 기록
+    // 7단계: 외상 처리
+    let outstandingInfo = null;
     if (method === '외상') {
+      // 전액 외상
       const outstandingSheet = _ensureOutstandingSheet(ss);
       outstandingSheet.appendRow([
         saleId, now, customerName, customerPhone,
         totalAmount, '미결제', '', '', note
       ]);
+    } else if (isPartialPayment) {
+      // 부분 결제: 차액을 별도 외상으로 등록
+      const outstandingSheet = _ensureOutstandingSheet(ss);
+      const outstandingId = saleId + '-OUT';
+      const outNote = `[부분결제 잔액 - 원거래 ${saleId}] ${note}`.trim();
+      outstandingSheet.appendRow([
+        outstandingId, now, customerName, customerPhone,
+        partialOutstandingAmount, '미결제', '', '', outNote
+      ]);
+      outstandingInfo = {
+        outstandingId: outstandingId,
+        amount: partialOutstandingAmount
+      };
     }
 
     return {
       success: true,
+      partialPayment: isPartialPayment ? {
+        paid: partialPaidAmount,
+        outstanding: partialOutstandingAmount,
+        outstandingId: outstandingInfo ? outstandingInfo.outstandingId : null
+      } : null,
       receipt: {
         saleId: saleId,
         timestamp: now.toISOString(),
@@ -377,10 +433,10 @@ function processSale(items, payment) {
         totalQty:     totalQuantity,
         totalAmount:  totalAmount,
         method:       method,
-        tendered:     tendered,
-        change:       change,
-        status:       status,
-        note:         note,
+        tendered:     isPartialPayment ? partialPaidAmount : tendered,
+        change:       isPartialPayment ? 0 : change,
+        status:       saleStatus,
+        note:         saleNote,
         customerName: customerName,
         customerPhone: customerPhone
       }
@@ -2379,11 +2435,24 @@ function pickupPreorder(params) {
     const tendered = Number(payment.tendered) || (method === '외상' ? 0 : totalAmount);
     const change = method === '현금' ? Math.max(0, tendered - totalAmount) : 0;
 
+    // 부분 결제 감지: 현금/Venmo인데 받은 금액 < 결제 금액 → 차액을 외상으로 처리
+    // 명시적으로 partialPay=true 요청한 경우에만 허용 (안전장치)
+    let isPartialPayment = false;
+    let partialPaidAmount = 0;
+    let partialOutstandingAmount = 0;
+
     if (method !== '외상' && tendered < totalAmount) {
-      return {
-        success: false,
-        message: `받은 금액 부족 (총액 $${totalAmount.toFixed(2)}, 받음 $${tendered.toFixed(2)})`
-      };
+      if (params.partialPay === true && tendered > 0) {
+        // 부분 결제 처리
+        isPartialPayment = true;
+        partialPaidAmount = tendered;
+        partialOutstandingAmount = totalAmount - tendered;
+      } else {
+        return {
+          success: false,
+          message: `받은 금액 부족 (총액 $${totalAmount.toFixed(2)}, 받음 $${tendered.toFixed(2)})`
+        };
+      }
     }
 
     // 4단계: 거래번호 생성
@@ -2392,28 +2461,66 @@ function pickupPreorder(params) {
     const rand = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     const saleId = `T-${ts}-${rand}`;
 
-    const note = `[선주문 ${params.preorderId} 픽업] ${(payment.note || preorderInfo.note || '')}`.trim();
-    const status = method === '외상' ? '외상' : '완료';
+    let note;
+    let status;
+    let saleAmount;  // Sales에 기록될 실제 매출액
+    let saleMethod;  // Sales에 기록될 결제 방법
+    let saleTendered;
+    let saleChange;
+
+    if (isPartialPayment) {
+      // 부분 결제: 받은 금액만큼만 매출로 기록, 차액은 외상으로
+      saleAmount = partialPaidAmount;
+      saleMethod = method;  // 현금 또는 Venmo
+      saleTendered = partialPaidAmount;
+      saleChange = 0;
+      status = '완료';
+      note = `[선주문 ${params.preorderId} 픽업 - 부분결제 $${partialPaidAmount.toFixed(2)}/${totalAmount.toFixed(2)}] ${(payment.note || preorderInfo.note || '')}`.trim();
+    } else {
+      saleAmount = totalAmount;
+      saleMethod = method;
+      saleTendered = tendered;
+      saleChange = change;
+      status = method === '외상' ? '외상' : '완료';
+      note = `[선주문 ${params.preorderId} 픽업] ${(payment.note || preorderInfo.note || '')}`.trim();
+    }
 
     // 5단계: Sales 기록
     salesSheet.appendRow([
       saleId, now, items.length, totalQty,
-      totalAmount, method, tendered, change, status,
+      saleAmount, saleMethod, saleTendered, saleChange, status,
       note, preorderInfo.customerName, preorderInfo.customerPhone
     ]);
 
-    // 6단계: SaleItems 기록
+    // 6단계: SaleItems 기록 (전체 항목 - 부분 결제도 항목 자체는 그대로)
     const itemRows = items.map(i => [saleId, i.id, i.name, i.price, i.qty, i.subtotal]);
     saleItemsSheet.getRange(saleItemsSheet.getLastRow() + 1, 1, itemRows.length, 6)
       .setValues(itemRows);
 
-    // 7단계: 외상이면 Outstanding 시트에도 기록
+    // 7단계: 외상 처리
+    //  - 전액 외상: 전체 금액을 외상으로
+    //  - 부분 결제: 차액(미결제분)을 외상으로 등록
+    let outstandingSaleId = null;
     if (method === '외상') {
+      // 전액 외상
       const outstandingSheet = _ensureOutstandingSheet(ss);
       outstandingSheet.appendRow([
         saleId, now, preorderInfo.customerName, preorderInfo.customerPhone,
         totalAmount, '미결제', '', '', note
       ]);
+      outstandingSaleId = saleId;
+    } else if (isPartialPayment) {
+      // 부분 결제 - 차액에 대한 별도 외상 ID 생성
+      const outstandingSheet = _ensureOutstandingSheet(ss);
+      const outNote = `[부분결제 잔액 - 선주문 ${params.preorderId} 픽업, 원거래 ${saleId}] ${(payment.note || preorderInfo.note || '')}`.trim();
+      // 같은 saleId 이지만 외상 항목은 차액만 기록
+      // (외상 결제 시 Sales 시트의 원거래 상태는 건드리지 않고 외상만 정리)
+      const outstandingId = saleId + '-OUT';
+      outstandingSheet.appendRow([
+        outstandingId, now, preorderInfo.customerName, preorderInfo.customerPhone,
+        partialOutstandingAmount, '미결제', '', '', outNote
+      ]);
+      outstandingSaleId = outstandingId;
     }
 
     // 8단계: Preorders 상태 업데이트
@@ -2425,7 +2532,14 @@ function pickupPreorder(params) {
 
     return {
       success: true,
-      message: '픽업 완료',
+      message: isPartialPayment
+        ? `픽업 완료 (부분결제 $${partialPaidAmount.toFixed(2)}, 외상 $${partialOutstandingAmount.toFixed(2)})`
+        : '픽업 완료',
+      partialPayment: isPartialPayment ? {
+        paid: partialPaidAmount,
+        outstanding: partialOutstandingAmount,
+        outstandingSaleId: outstandingSaleId
+      } : null,
       receipt: {
         preorderId: params.preorderId,
         saleId,
@@ -2434,9 +2548,9 @@ function pickupPreorder(params) {
         itemCount: items.length,
         totalQty,
         totalAmount,
-        method,
-        tendered,
-        change,
+        method: saleMethod,
+        tendered: saleTendered,
+        change: saleChange,
         status,
         customerName: preorderInfo.customerName,
         customerPhone: preorderInfo.customerPhone,

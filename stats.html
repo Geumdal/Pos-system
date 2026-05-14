@@ -377,8 +377,34 @@
     }
     .sale-id {
       font-size: 9px; color: #c7c7cc;
-      margin-top: 6px; font-family: monospace;
+      font-family: monospace;
       letter-spacing: 0.3px;
+    }
+    .sale-actions-row {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-top: 6px;
+      padding-top: 6px; border-top: 1px solid #f5f5f7;
+    }
+    .sale-actions {
+      display: flex; gap: 6px;
+    }
+    .sale-action-btn {
+      padding: 4px 10px; border-radius: 6px;
+      font-size: 11px; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+      border: 1px solid #e5e5ea; background: white;
+    }
+    .sale-action-btn.edit {
+      color: #007aff; border-color: #cde4ff;
+    }
+    .sale-action-btn.edit:hover {
+      background: #007aff; color: white;
+    }
+    .sale-action-btn.delete {
+      color: #ff3b30; border-color: #ffd5d5;
+    }
+    .sale-action-btn.delete:hover {
+      background: #ff3b30; color: white;
     }
 
     @media (max-width: 768px) {
@@ -1092,7 +1118,13 @@
           ${customerInfo ? `<div class="sale-customer-row">${customerInfo}</div>` : ''}
           ${changeHtml ? `<div class="sale-customer-row">${changeHtml}</div>` : ''}
           ${noteHtml}
-          <div class="sale-id">${escapeHtml(s.id)}</div>
+          <div class="sale-actions-row">
+            <span class="sale-id">${escapeHtml(s.id)}</span>
+            <div class="sale-actions">
+              <button class="sale-action-btn edit" onclick="openEditSaleModal('${escapeAttr(s.id)}')">✏️ 편집</button>
+              <button class="sale-action-btn delete" onclick="deleteSaleConfirm('${escapeAttr(s.id)}', ${s.amount})">🗑️ 삭제</button>
+            </div>
+          </div>
         </div>
       `;
     }
@@ -1121,6 +1153,54 @@
       });
     }
   </script>
+
+  <!-- 거래 편집 모달 -->
+  <div id="editSaleModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center; padding:20px;" onclick="closeEditSaleModalOnBg(event)">
+    <div style="background:white; border-radius:16px; padding:24px; max-width:480px; width:100%; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3); position:relative;">
+      <button onclick="closeEditSaleModal()" style="position:absolute; top:12px; right:12px; width:32px; height:32px; background:#f5f5f7; border:none; border-radius:50%; font-size:18px; cursor:pointer;">×</button>
+
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="font-size:36px;">✏️</div>
+        <h2 style="font-size:18px; font-weight:700; color:#1d1d1f; margin:6px 0 4px;">거래 편집</h2>
+        <div style="font-size:11px; color:#8e8e93; font-family:monospace;" id="editSaleId"></div>
+      </div>
+
+      <div id="editSaleInfo" style="background:#f5f5f7; border-radius:10px; padding:12px; margin-bottom:14px; font-size:12px; line-height:1.6;"></div>
+
+      <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 12px; margin-bottom:14px;">
+        <div style="font-size:11px; color:#92400e; line-height:1.5;">
+          💡 항목 변경은 안전상 불가합니다. 잘못된 거래는 🗑️ 삭제 후 다시 입력하세요.
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">고객명</label>
+        <input type="text" id="editCustomerName" maxlength="40"
+               style="width:100%; padding:10px 12px; border:1px solid #e5e5ea; border-radius:8px; font-size:14px; font-family:inherit; box-sizing:border-box;">
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">연락처</label>
+        <input type="tel" id="editCustomerPhone" maxlength="30"
+               style="width:100%; padding:10px 12px; border:1px solid #e5e5ea; border-radius:8px; font-size:14px; font-family:inherit; box-sizing:border-box;">
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">메모</label>
+        <textarea id="editSaleNote" maxlength="200" rows="3"
+                  style="width:100%; padding:10px 12px; border:1px solid #e5e5ea; border-radius:8px; font-size:14px; font-family:inherit; box-sizing:border-box; resize:vertical;"></textarea>
+      </div>
+
+      <div id="editSaleError" style="font-size:13px; color:#ff3b30; text-align:center; margin-bottom:10px; min-height:18px;"></div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <button onclick="closeEditSaleModal()"
+                style="padding:12px; background:#e5e5ea; color:#1d1d1f; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;">취소</button>
+        <button id="editSaleBtn" onclick="confirmEditSale()"
+                style="padding:12px; background:#007aff; color:white; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;">✅ 저장</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 비밀번호 변경 모달 -->
   <div id="changePwModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center; padding:20px;" onclick="closeChangePwModalOnBg(event)">
@@ -1247,6 +1327,127 @@
       t.style.background = type === 'error' ? '#ff3b30' : '#34c759';
       t.style.opacity = '1';
       setTimeout(() => { t.style.opacity = '0'; }, 2800);
+    }
+
+    /* ─── 거래 편집 ─── */
+    let editingSaleId = null;
+
+    async function openEditSaleModal(saleId) {
+      editingSaleId = saleId;
+      document.getElementById('editSaleId').textContent = saleId;
+      document.getElementById('editSaleError').textContent = '';
+      document.getElementById('editSaleInfo').textContent = '⏳ 불러오는 중...';
+      document.getElementById('editCustomerName').value = '';
+      document.getElementById('editCustomerPhone').value = '';
+      document.getElementById('editSaleNote').value = '';
+      document.getElementById('editSaleModal').style.display = 'flex';
+
+      try {
+        const res = await api('getSaleDetail', { saleId: saleId });
+        if (!res.success) {
+          document.getElementById('editSaleInfo').innerHTML =
+            `<div style="color:#ff3b30;">❌ ${escapeHtml(res.message || '조회 실패')}</div>`;
+          return;
+        }
+        const s = res.sale;
+        const d = new Date(s.date);
+        const dateStr = d.toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' });
+        const itemsHtml = (s.items || []).map(it =>
+          `<div style="display:flex; justify-content:space-between; padding:2px 0;">
+            <span>${escapeHtml(cleanProductName(it.name))} × ${it.qty}</span>
+            <span>${fmtUSD(it.subtotal)}</span>
+          </div>`
+        ).join('');
+        document.getElementById('editSaleInfo').innerHTML = `
+          <div style="font-weight:600; margin-bottom:4px;">📅 ${dateStr} · ${escapeHtml(s.method)}</div>
+          ${itemsHtml}
+          <div style="display:flex; justify-content:space-between; font-weight:700; padding-top:6px; border-top:1px solid #d1d1d6; margin-top:6px;">
+            <span>합계</span><span>${fmtUSD(s.amount)}</span>
+          </div>
+        `;
+        document.getElementById('editCustomerName').value = s.customerName || '';
+        document.getElementById('editCustomerPhone').value = s.customerPhone || '';
+        document.getElementById('editSaleNote').value = s.note || '';
+      } catch (err) {
+        document.getElementById('editSaleInfo').innerHTML =
+          `<div style="color:#ff3b30;">오류: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function closeEditSaleModal() {
+      document.getElementById('editSaleModal').style.display = 'none';
+      editingSaleId = null;
+    }
+
+    function closeEditSaleModalOnBg(event) {
+      if (event.target.id === 'editSaleModal') closeEditSaleModal();
+    }
+
+    async function confirmEditSale() {
+      if (!editingSaleId) return;
+      const errEl = document.getElementById('editSaleError');
+      errEl.textContent = '';
+
+      const customerName = document.getElementById('editCustomerName').value.trim();
+      const customerPhone = document.getElementById('editCustomerPhone').value.trim();
+      const note = document.getElementById('editSaleNote').value.trim();
+
+      const btn = document.getElementById('editSaleBtn');
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ 저장 중...';
+
+      try {
+        const res = await api('updateSale', {
+          saleId: editingSaleId,
+          customerName: customerName,
+          customerPhone: customerPhone,
+          note: note
+        });
+        if (res.success) {
+          closeEditSaleModal();
+          showToast('✅ 거래 수정 완료', 'success');
+          loadRecentSales();
+        } else {
+          errEl.textContent = '❌ ' + (res.message || '수정 실패');
+        }
+      } catch (err) {
+        errEl.textContent = '❌ 오류: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
+
+    /* ─── 거래 삭제 ─── */
+    async function deleteSaleConfirm(saleId, amount) {
+      if (!confirm(
+        `이 거래를 완전 삭제하시겠어요?\n\n` +
+        `💰 ${fmtUSD(amount)}\n` +
+        `🆔 ${saleId}\n\n` +
+        `⚠️ 작업 내역:\n` +
+        `  • Sales 시트에서 거래 완전 제거\n` +
+        `  • 재고 자동 복원\n` +
+        `  • 외상이었으면 외상 기록 제거\n` +
+        `  • 선주문 픽업이었으면 '예약중'으로 복원\n\n` +
+        `이 작업은 되돌릴 수 없습니다.`
+      )) return;
+
+      try {
+        const res = await api('deleteSale', { saleId: saleId });
+        if (res.success) {
+          let msg = '🗑️ 거래 삭제 완료';
+          if (res.restoredItems > 0) msg += ` · 재고 ${res.restoredItems}개 복원`;
+          if (res.restoredPreorder) msg += ` · 선주문 복원: ${res.restoredPreorder}`;
+          showToast(msg, 'success');
+          loadRecentSales();
+          loadStats();
+        } else {
+          showToast(res.message || '삭제 실패', 'error');
+        }
+      } catch (err) {
+        showToast('오류: ' + err.message, 'error');
+      }
     }
 
     /* ─── 비밀번호 변경 ─── */

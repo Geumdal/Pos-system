@@ -876,6 +876,29 @@
             <span id="changeAmount">$0.00</span>
           </div>
         </div>
+
+        <!-- 부분 결제 안내 (받은 금액 < 결제 금액일 때 표시) -->
+        <div id="partialPayBox" style="display:none; background:#fff5f5; border:1px solid #ffd5d5; border-radius:10px; padding:12px; margin-bottom:14px;">
+          <div style="font-size:13px; font-weight:700; color:#c62828; margin-bottom:8px;">
+            💡 부분 결제 (잔액은 외상으로 등록)
+          </div>
+          <div style="font-size:12px; color:#8e8e93; line-height:1.6;">
+            받은 금액이 부족합니다. 부분 결제로 처리하면:
+          </div>
+          <div style="background:white; border-radius:8px; padding:10px; margin-top:8px; font-size:12px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+              <span>현재 받음 (현금):</span>
+              <span style="font-weight:600;" id="partialPaidDisplay">$0.00</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; color:#c62828; font-weight:700;">
+              <span>외상 등록 (잔액):</span>
+              <span id="partialOutstandingDisplay">$0.00</span>
+            </div>
+          </div>
+          <div style="font-size:11px; color:#c62828; margin-top:8px;">
+            ⚠️ 외상 등록을 위해 <strong>고객명 필수</strong> (메모 또는 고객명 칸 확인)
+          </div>
+        </div>
       </div>
 
       <div class="modal-actions">
@@ -1386,6 +1409,7 @@
       if (payMethod === '외상' || payMethod === '선주문') {
         const name = document.getElementById('customerName').value.trim();
         btn.disabled = !name;
+        document.getElementById('partialPayBox').style.display = 'none';
         return;
       }
 
@@ -1396,7 +1420,22 @@
         ? fmtUSD(change)
         : `부족 ${fmtUSD(Math.abs(change))}`;
       el.style.color = change >= 0 ? '#34c759' : '#ff3b30';
-      btn.disabled = (tendered < total);
+
+      // 부분 결제 박스 표시
+      const partialBox = document.getElementById('partialPayBox');
+      if (tendered > 0 && tendered < total) {
+        partialBox.style.display = 'block';
+        document.getElementById('partialPaidDisplay').textContent = fmtUSD(tendered);
+        document.getElementById('partialOutstandingDisplay').textContent = fmtUSD(total - tendered);
+        // 부분 결제 가능: 고객명이 있으면 활성화
+        const name = document.getElementById('customerName').value.trim();
+        btn.disabled = !name;
+        btn.textContent = name ? '✅ 부분 결제 (잔액 외상)' : '결제 완료';
+      } else {
+        partialBox.style.display = 'none';
+        btn.disabled = (tendered < total);
+        btn.textContent = '결제 완료';
+      }
     }
 
     // 고객명 입력 시 외상/선주문 버튼 활성화 체크
@@ -1461,6 +1500,7 @@
 
       // 외상 / 현금 / Venmo
       let tendered;
+      let isPartial = false;
       if (payMethod === '외상') {
         if (!customerName) {
           showToast('외상은 고객명이 필수입니다', 'error');
@@ -1472,8 +1512,25 @@
       } else {
         tendered = Number(document.getElementById('tenderedInput').value) || 0;
         if (tendered < total) {
-          showToast('받은 금액이 부족합니다', 'error');
-          return;
+          // 부분 결제 시도
+          if (tendered <= 0) {
+            showToast('받은 금액을 입력하세요', 'error');
+            return;
+          }
+          if (!customerName) {
+            showToast('부분 결제 시 차액이 외상으로 등록되므로 고객명이 필수입니다', 'error');
+            document.getElementById('customerDetails').open = true;
+            document.getElementById('customerName').focus();
+            return;
+          }
+          isPartial = true;
+          if (!confirm(
+            `부분 결제로 처리하시겠어요?\n\n` +
+            `결제 총액: ${fmtUSD(total)}\n` +
+            `받은 금액: ${fmtUSD(tendered)} (${payMethod})\n` +
+            `외상 등록: ${fmtUSD(total - tendered)}\n\n` +
+            `잔액은 외상으로 자동 등록됩니다.`
+          )) return;
         }
       }
 
@@ -1488,6 +1545,7 @@
         payment: {
           method: payMethod,
           tendered: tendered,
+          partialPay: isPartial,
           customerName: customerName,
           customerPhone: customerPhone,
           note: note
@@ -1512,6 +1570,15 @@
       }
 
       closePaymentModal();
+
+      // 부분 결제 알림
+      if (res.partialPayment) {
+        showToast(
+          `✅ 부분 결제 완료 · 외상 등록 ${fmtUSD(res.partialPayment.outstanding)}`,
+          'success'
+        );
+      }
+
       showReceipt(res.receipt);
       cart = [];
       renderCart();

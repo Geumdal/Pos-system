@@ -934,16 +934,28 @@
       const btn = document.getElementById('pickupBtn');
       const original = btn.textContent;
 
-      // 현금일 때 받은 금액 검증
+      // 현금/Venmo일 때 받은 금액 검증 + 부분 결제 옵션
       let tenderedAmount = currentPickupAmount;
-      if (currentPickupMethod === '현금') {
+      let isPartial = false;
+
+      if (currentPickupMethod === '현금' || currentPickupMethod === 'Venmo') {
         const input = document.getElementById('pickupTendered').value;
         if (input && Number(input) > 0) {
           tenderedAmount = Number(input);
           if (tenderedAmount < currentPickupAmount) {
-            if (!confirm(`받은 금액(${fmtUSD(tenderedAmount)})이 결제 금액(${fmtUSD(currentPickupAmount)})보다 적습니다.\n그대로 처리하시겠어요?`)) {
+            // 부분 결제 옵션 제안
+            const remain = currentPickupAmount - tenderedAmount;
+            if (!confirm(
+              `받은 금액이 결제 금액보다 부족합니다.\n\n` +
+              `결제 총액: ${fmtUSD(currentPickupAmount)}\n` +
+              `받은 금액: ${fmtUSD(tenderedAmount)}\n` +
+              `외상 등록: ${fmtUSD(remain)}\n\n` +
+              `[확인] 부분 결제로 처리 (잔액 외상 자동 등록)\n` +
+              `[취소] 취소`
+            )) {
               return;
             }
+            isPartial = true;
           }
         }
       }
@@ -956,13 +968,15 @@
           preorderId: currentPickupId,
           payment: {
             method: currentPickupMethod,
-            tendered: tenderedAmount
+            tendered: tenderedAmount,
+            partialPay: isPartial
           }
         });
         if (res.success) {
-          // 거스름돈 메시지 포함
           let msg = `✅ 픽업 완료 (${currentPickupMethod})`;
-          if (currentPickupMethod === '현금' && tenderedAmount > currentPickupAmount) {
+          if (isPartial && res.partialPayment) {
+            msg = `✅ 부분 결제 · 받음 ${fmtUSD(res.partialPayment.paid)} · 외상 ${fmtUSD(res.partialPayment.outstanding)}`;
+          } else if (currentPickupMethod === '현금' && tenderedAmount > currentPickupAmount) {
             const change = tenderedAmount - currentPickupAmount;
             msg += ` · 거스름돈 ${fmtUSD(change)}`;
           }
