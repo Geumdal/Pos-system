@@ -87,6 +87,19 @@ const API_FUNCTIONS = {
   pickupPreorder:        (p) => pickupPreorder(p),
   cancelPreorder:        (p) => cancelPreorder(p.preorderId),
   updatePreorder:        (p) => updatePreorder(p),
+  // 고객 관리 (연락처 기준 합산)
+  getCustomerSummary:    (p) => getCustomerSummary(p),
+  getAllCustomers:       (p) => getAllCustomers(),
+  payAllOutstanding:     (p) => payAllOutstanding(p),
+  // 데이터 삭제
+  deleteOutstanding:     (p) => deleteOutstanding(p.saleId),
+  resetAllOutstanding:   (p) => resetAllOutstanding(p.confirmCode),
+  deletePreorder:        (p) => deletePreorder(p.preorderId),
+  resetAllPreorders:     (p) => resetAllPreorders(p.confirmCode),
+  deleteCustomerData:    (p) => deleteCustomerData(p.phone),
+  // 비밀번호 관리
+  verifyAdminPassword:   (p) => verifyAdminPassword(p),
+  changeAdminPassword:   (p) => changeAdminPassword(p),
   // 메타
   ping:                  () => ({ success: true, time: new Date().toISOString(), version: 'api-v1' })
 };
@@ -485,7 +498,7 @@ function getStats(period) {
     const now = new Date();
     const tz  = Session.getScriptTimeZone();
 
-    // 기간 필터: 'today' | 'week' | 'month' | 'year'
+    // 기간 필터: 'today' | 'week' | 'month' | 'year' | {start, end} (custom)
     const range = _periodRange(period, now);
 
     const validSales = [];
@@ -576,6 +589,13 @@ function _emptyStats() {
 }
 
 function _periodRange(period, now) {
+  // custom 기간: { start: 'yyyy-MM-dd', end: 'yyyy-MM-dd' } 객체로 전달
+  if (period && typeof period === 'object' && period.start && period.end) {
+    const start = new Date(period.start + 'T00:00:00');
+    const end = new Date(period.end + 'T23:59:59');
+    return { start: start, end: end };
+  }
+
   const start = new Date(now);
   const end   = new Date(now);
   end.setHours(23, 59, 59, 999);
@@ -605,20 +625,47 @@ function getRecentSales(limit) {
     const sheet = ss.getSheetByName(SHEET_SALES);
     if (!sheet) return { success: true, sales: [] };
 
+    const itemsSheet = ss.getSheetByName(SHEET_SALE_ITEMS);
+
     const data = sheet.getDataRange().getValues();
     const max = Number(limit) || 20;
     const sales = [];
 
+    // 항목들을 거래번호별로 그룹화
+    const itemsByTransaction = {};
+    if (itemsSheet) {
+      const itemsData = itemsSheet.getDataRange().getValues();
+      for (let i = 1; i < itemsData.length; i++) {
+        const txId = String(itemsData[i][0] || '').trim();
+        if (!txId) continue;
+        if (!itemsByTransaction[txId]) itemsByTransaction[txId] = [];
+        itemsByTransaction[txId].push({
+          id:       String(itemsData[i][1]),
+          name:     String(itemsData[i][2]),
+          price:    Number(itemsData[i][3]) || 0,
+          qty:      Number(itemsData[i][4]) || 0,
+          subtotal: Number(itemsData[i][5]) || 0
+        });
+      }
+    }
+
     for (let i = data.length - 1; i >= 1 && sales.length < max; i--) {
       if (!data[i][0]) continue;
+      const saleId = String(data[i][0]);
       sales.push({
-        id:        String(data[i][0]),
-        date:      data[i][1] instanceof Date ? data[i][1].toISOString() : String(data[i][1]),
-        itemCount: Number(data[i][2]) || 0,
-        totalQty:  Number(data[i][3]) || 0,
-        amount:    Number(data[i][4]) || 0,
-        method:    String(data[i][5] || ''),
-        status:    String(data[i][8] || '완료')
+        id:            saleId,
+        date:          data[i][1] instanceof Date ? data[i][1].toISOString() : String(data[i][1]),
+        itemCount:     Number(data[i][2]) || 0,
+        totalQty:      Number(data[i][3]) || 0,
+        amount:        Number(data[i][4]) || 0,
+        method:        String(data[i][5] || ''),
+        tendered:      Number(data[i][6]) || 0,
+        change:        Number(data[i][7]) || 0,
+        status:        String(data[i][8] || '완료'),
+        note:          String(data[i][9] || ''),
+        customerName:  String(data[i][10] || ''),
+        customerPhone: String(data[i][11] || ''),
+        items:         itemsByTransaction[saleId] || []
       });
     }
     return { success: true, sales: sales };
@@ -1472,6 +1519,37 @@ function resetAllStats(confirmCode) {
         }
 
         result.productsReset = lastRow - 1;
+      }
+    }
+
+    // 5. Outstanding 시트 초기화
+    result.outstandingCleared = 0;
+    const outstandingSheet = ss.getSheetByName(SHEET_OUTSTANDING);
+    if (outstandingSheet) {
+      const lastRow = outstandingSheet.getLastRow();
+      if (lastRow > 1) {
+        outstandingSheet.deleteRows(2, lastRow - 1);
+        result.outstandingCleared = lastRow - 1;
+      }
+    }
+
+    // 6. Preorders + PreorderItems 시트 초기화
+    result.preordersCleared = 0;
+    result.preorderItemsCleared = 0;
+    const preordersSheet = ss.getSheetByName(SHEET_PREORDERS);
+    if (preordersSheet) {
+      const lastRow = preordersSheet.getLastRow();
+      if (lastRow > 1) {
+        preordersSheet.deleteRows(2, lastRow - 1);
+        result.preordersCleared = lastRow - 1;
+      }
+    }
+    const preorderItemsSheet = ss.getSheetByName(SHEET_PREORDER_ITEMS);
+    if (preorderItemsSheet) {
+      const lastRow = preorderItemsSheet.getLastRow();
+      if (lastRow > 1) {
+        preorderItemsSheet.deleteRows(2, lastRow - 1);
+        result.preorderItemsCleared = lastRow - 1;
       }
     }
 
@@ -2675,5 +2753,1293 @@ function getPreorderDetail(preorderId) {
     return { success: true, preorder: info, items };
   } catch (err) {
     return { success: false, message: '조회 실패: ' + err.message };
+  }
+}
+
+
+/* ═════════════════════════════════════════════
+ * 고객 합산 뷰 (연락처 기준 식별)
+ * ═════════════════════════════════════════════ */
+
+/**
+ * 연락처 정규화 (식별 키 생성)
+ * 모든 비숫자 문자 제거하여 비교
+ * 예: "703-555-1234" → "7035551234"
+ */
+function _normalizePhone(phone) {
+  return String(phone || '').replace(/[^\d]/g, '');
+}
+
+
+/**
+ * getCustomerSummary - 특정 연락처의 모든 거래 합산
+ * 
+ * params: { phone: "703-555-1234" }
+ */
+function getCustomerSummary(params) {
+  try {
+    _checkSheetId();
+    const targetPhone = _normalizePhone(params && params.phone);
+    if (!targetPhone) {
+      return { success: false, message: '연락처가 필요합니다.' };
+    }
+
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const salesSheet = ss.getSheetByName(SHEET_SALES);
+    const itemsSheet = ss.getSheetByName(SHEET_SALE_ITEMS);
+    const { preordersSheet, itemsSheet: preorderItemsSheet } = _ensurePreorderSheets(ss);
+
+    // 1단계: SaleItems 그룹화
+    const saleItemsByTx = {};
+    if (itemsSheet) {
+      const itemsData = itemsSheet.getDataRange().getValues();
+      for (let i = 1; i < itemsData.length; i++) {
+        const txId = String(itemsData[i][0] || '').trim();
+        if (!txId) continue;
+        if (!saleItemsByTx[txId]) saleItemsByTx[txId] = [];
+        saleItemsByTx[txId].push({
+          id:       String(itemsData[i][1]),
+          name:     String(itemsData[i][2]),
+          price:    Number(itemsData[i][3]) || 0,
+          qty:      Number(itemsData[i][4]) || 0,
+          subtotal: Number(itemsData[i][5]) || 0
+        });
+      }
+    }
+
+    // 2단계: PreorderItems 그룹화
+    const preorderItemsByPo = {};
+    if (preorderItemsSheet) {
+      const piData = preorderItemsSheet.getDataRange().getValues();
+      for (let i = 1; i < piData.length; i++) {
+        const poId = String(piData[i][0] || '').trim();
+        if (!poId) continue;
+        if (!preorderItemsByPo[poId]) preorderItemsByPo[poId] = [];
+        preorderItemsByPo[poId].push({
+          id:       String(piData[i][1]),
+          name:     String(piData[i][2]),
+          qty:      Number(piData[i][3]) || 0,
+          price:    Number(piData[i][4]) || 0,
+          subtotal: Number(piData[i][5]) || 0
+        });
+      }
+    }
+
+    // 3단계: Sales 시트에서 같은 연락처 거래 필터
+    const sales = [];
+    let foundName = '';
+    const namesUsed = {};
+
+    if (salesSheet) {
+      const salesData = salesSheet.getDataRange().getValues();
+      for (let i = 1; i < salesData.length; i++) {
+        if (!salesData[i][0]) continue;
+        const phone = _normalizePhone(salesData[i][11]);
+        if (phone !== targetPhone) continue;
+
+        const saleId = String(salesData[i][0]);
+        const customerName = String(salesData[i][10] || '');
+        if (customerName) {
+          namesUsed[customerName] = (namesUsed[customerName] || 0) + 1;
+        }
+
+        sales.push({
+          saleId:        saleId,
+          date:          salesData[i][1] instanceof Date ? salesData[i][1].toISOString() : String(salesData[i][1]),
+          itemCount:     Number(salesData[i][2]) || 0,
+          totalQty:      Number(salesData[i][3]) || 0,
+          amount:        Number(salesData[i][4]) || 0,
+          method:        String(salesData[i][5] || ''),
+          tendered:      Number(salesData[i][6]) || 0,
+          change:        Number(salesData[i][7]) || 0,
+          status:        String(salesData[i][8] || '완료'),
+          note:          String(salesData[i][9] || ''),
+          customerName:  customerName,
+          customerPhone: String(salesData[i][11] || ''),
+          items:         saleItemsByTx[saleId] || []
+        });
+      }
+    }
+
+    // 4단계: Preorders 시트에서 같은 연락처 예약 필터
+    const preorders = [];
+    if (preordersSheet) {
+      const poData = preordersSheet.getDataRange().getValues();
+      for (let i = 1; i < poData.length; i++) {
+        if (!poData[i][0]) continue;
+        const phone = _normalizePhone(poData[i][3]);
+        if (phone !== targetPhone) continue;
+
+        const poId = String(poData[i][0]);
+        const customerName = String(poData[i][2] || '');
+        if (customerName) {
+          namesUsed[customerName] = (namesUsed[customerName] || 0) + 1;
+        }
+
+        preorders.push({
+          preorderId:    poId,
+          date:          poData[i][1] instanceof Date ? poData[i][1].toISOString() : String(poData[i][1]),
+          customerName:  customerName,
+          customerPhone: String(poData[i][3] || ''),
+          kakaoId:       String(poData[i][4] || ''),
+          status:        String(poData[i][5] || ''),
+          pickupDate:    String(poData[i][6] || ''),
+          pickupAt:      poData[i][7] instanceof Date ? poData[i][7].toISOString() : (poData[i][7] ? String(poData[i][7]) : ''),
+          saleId:        String(poData[i][8] || ''),
+          totalAmount:   Number(poData[i][9]) || 0,
+          note:          String(poData[i][10] || ''),
+          items:         preorderItemsByPo[poId] || []
+        });
+      }
+    }
+
+    // 5단계: 가장 자주 쓰인 이름 결정
+    let mostUsedName = '';
+    let maxCount = 0;
+    Object.keys(namesUsed).forEach(n => {
+      if (namesUsed[n] > maxCount) {
+        maxCount = namesUsed[n];
+        mostUsedName = n;
+      }
+    });
+
+    // 6단계: 합산 통계
+    let paidCount = 0, paidAmount = 0;
+    let unpaidCount = 0, unpaidAmount = 0;
+    let pendingPreorderCount = 0, pendingPreorderAmount = 0;
+    let pickedUpCount = 0, pickedUpAmount = 0;
+
+    sales.forEach(s => {
+      if (s.status === '외상') {
+        unpaidCount++;
+        unpaidAmount += s.amount;
+      } else if (s.status === '환불됨') {
+        // 환불은 합산 제외
+      } else {
+        paidCount++;
+        paidAmount += s.amount;
+      }
+    });
+
+    preorders.forEach(p => {
+      if (p.status === '예약중') {
+        pendingPreorderCount++;
+        pendingPreorderAmount += p.totalAmount;
+      } else if (p.status === '픽업완료') {
+        pickedUpCount++;
+        pickedUpAmount += p.totalAmount;
+      }
+    });
+
+    // 정렬: 최신순
+    sales.sort((a, b) => b.date.localeCompare(a.date));
+    preorders.sort((a, b) => b.date.localeCompare(a.date));
+
+    return {
+      success: true,
+      customer: {
+        name: mostUsedName,
+        phone: params.phone,
+        totalSales: sales.length,
+        totalPreorders: preorders.length,
+        paid:    { count: paidCount, amount: paidAmount },
+        unpaid:  { count: unpaidCount, amount: unpaidAmount },
+        pendingPreorder:  { count: pendingPreorderCount, amount: pendingPreorderAmount },
+        pickedUp: { count: pickedUpCount, amount: pickedUpAmount }
+      },
+      sales:     sales,
+      preorders: preorders
+    };
+  } catch (err) {
+    return { success: false, message: '조회 실패: ' + err.message };
+  }
+}
+
+
+/**
+ * getAllCustomers - 모든 고객 목록 (연락처별 그룹화)
+ */
+function getAllCustomers() {
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const salesSheet = ss.getSheetByName(SHEET_SALES);
+    const { preordersSheet } = _ensurePreorderSheets(ss);
+
+    // 연락처별 집계
+    const customerMap = {};  // normalizedPhone → { ... }
+
+    function addEntry(phone, displayPhone, name, type, amount, status, date) {
+      const normPhone = _normalizePhone(phone);
+      if (!normPhone) return;
+
+      if (!customerMap[normPhone]) {
+        customerMap[normPhone] = {
+          phone: displayPhone,
+          normalizedPhone: normPhone,
+          names: {},
+          totalCount: 0,
+          paid: { count: 0, amount: 0 },
+          unpaid: { count: 0, amount: 0 },
+          pendingPreorder: { count: 0, amount: 0 },
+          pickedUp: { count: 0, amount: 0 },
+          lastDate: ''
+        };
+      }
+      const c = customerMap[normPhone];
+
+      if (name) c.names[name] = (c.names[name] || 0) + 1;
+
+      // displayPhone가 더 깨끗한 형식이면 갱신 (보통 첫 등록 형식 유지)
+      if (!c.phone && displayPhone) c.phone = displayPhone;
+
+      if (date && date > c.lastDate) c.lastDate = date;
+
+      c.totalCount++;
+      if (type === 'sale') {
+        if (status === '외상') {
+          c.unpaid.count++;
+          c.unpaid.amount += amount;
+        } else if (status === '환불됨') {
+          // 합산 제외
+        } else {
+          c.paid.count++;
+          c.paid.amount += amount;
+        }
+      } else if (type === 'preorder') {
+        if (status === '예약중') {
+          c.pendingPreorder.count++;
+          c.pendingPreorder.amount += amount;
+        } else if (status === '픽업완료') {
+          c.pickedUp.count++;
+          c.pickedUp.amount += amount;
+        }
+      }
+    }
+
+    // Sales 처리
+    if (salesSheet) {
+      const data = salesSheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (!data[i][0]) continue;
+        const phone = String(data[i][11] || '');
+        const name = String(data[i][10] || '');
+        const amount = Number(data[i][4]) || 0;
+        const status = String(data[i][8] || '');
+        const date = data[i][1] instanceof Date ? data[i][1].toISOString() : String(data[i][1]);
+        addEntry(phone, phone, name, 'sale', amount, status, date);
+      }
+    }
+
+    // Preorders 처리
+    if (preordersSheet) {
+      const data = preordersSheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (!data[i][0]) continue;
+        const phone = String(data[i][3] || '');
+        const name = String(data[i][2] || '');
+        const amount = Number(data[i][9]) || 0;
+        const status = String(data[i][5] || '');
+        const date = data[i][1] instanceof Date ? data[i][1].toISOString() : String(data[i][1]);
+        addEntry(phone, phone, name, 'preorder', amount, status, date);
+      }
+    }
+
+    // 배열로 변환 + 가장 많이 쓰인 이름 결정
+    const customers = Object.values(customerMap).map(c => {
+      let mostUsedName = '';
+      let maxCount = 0;
+      Object.keys(c.names).forEach(n => {
+        if (c.names[n] > maxCount) {
+          maxCount = c.names[n];
+          mostUsedName = n;
+        }
+      });
+      return {
+        name: mostUsedName,
+        phone: c.phone,
+        normalizedPhone: c.normalizedPhone,
+        totalCount: c.totalCount,
+        paid: c.paid,
+        unpaid: c.unpaid,
+        pendingPreorder: c.pendingPreorder,
+        pickedUp: c.pickedUp,
+        lastDate: c.lastDate,
+        // 합계 (환불/취소 제외)
+        // 합계 (결제완료 + 미결제만 - 픽업완료는 결제완료에 이미 포함, 예약중은 결제 안 됨)
+        totalAmount: c.paid.amount + c.unpaid.amount,
+        // 손님이 갚을 돈 (미결제만)
+        outstandingAmount: c.unpaid.amount + c.pendingPreorder.amount
+      };
+    });
+
+    // 정렬: 미결제가 위, 그다음 최신 거래순
+    customers.sort((a, b) => {
+      if (a.outstandingAmount !== b.outstandingAmount) {
+        return b.outstandingAmount - a.outstandingAmount;
+      }
+      return b.lastDate.localeCompare(a.lastDate);
+    });
+
+    return {
+      success: true,
+      customers: customers,
+      summary: {
+        totalCustomers: customers.length,
+        totalUnpaid:    customers.reduce((s, c) => s + c.unpaid.amount, 0),
+        unpaidCustomers: customers.filter(c => c.unpaid.amount > 0).length,
+        pendingPreorders: customers.reduce((s, c) => s + c.pendingPreorder.amount, 0)
+      }
+    };
+  } catch (err) {
+    return { success: false, message: '조회 실패: ' + err.message };
+  }
+}
+
+
+/**
+ * payAllOutstanding - 특정 고객의 모든 미결제 외상 일괄 결제
+ *
+ * params: { phone: "703-555-1234", method: "현금" | "Venmo" }
+ */
+function payAllOutstanding(params) {
+  if (!params || !params.phone) {
+    return { success: false, message: '연락처가 필요합니다.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const targetPhone = _normalizePhone(params.phone);
+    const cleanMethod = (params.method === 'Venmo' || params.method === 'venmo') ? 'Venmo' : '현금';
+
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const salesSheet = ss.getSheetByName(SHEET_SALES);
+    const outstandingSheet = _ensureOutstandingSheet(ss);
+
+    if (!salesSheet) {
+      return { success: false, message: 'Sales 시트가 없습니다.' };
+    }
+
+    // 1단계: Outstanding 시트에서 해당 고객의 미결제 찾기
+    const outData = outstandingSheet.getDataRange().getValues();
+    const targetSaleIds = [];
+
+    for (let i = 1; i < outData.length; i++) {
+      const phone = _normalizePhone(outData[i][3]);
+      const status = String(outData[i][5] || '').trim();
+      if (phone === targetPhone && status === '미결제') {
+        targetSaleIds.push({
+          saleId: String(outData[i][0]),
+          rowIdx: i + 1
+        });
+      }
+    }
+
+    if (targetSaleIds.length === 0) {
+      return { success: false, message: '미결제 외상이 없습니다.' };
+    }
+
+    const now = new Date();
+    let totalAmount = 0;
+
+    // 2단계: 각 거래에 대해 처리
+    const salesData = salesSheet.getDataRange().getValues();
+    targetSaleIds.forEach(t => {
+      // Outstanding 시트 갱신
+      outstandingSheet.getRange(t.rowIdx, 6).setValue('결제완료');
+      outstandingSheet.getRange(t.rowIdx, 7).setValue(now);
+      outstandingSheet.getRange(t.rowIdx, 8).setValue(cleanMethod);
+
+      // Sales 시트 갱신
+      for (let i = 1; i < salesData.length; i++) {
+        if (String(salesData[i][0]).trim() === t.saleId) {
+          const amount = Number(salesData[i][4]) || 0;
+          totalAmount += amount;
+          salesSheet.getRange(i + 1, 9).setValue('완료');
+          salesSheet.getRange(i + 1, 6).setValue(cleanMethod);
+          salesSheet.getRange(i + 1, 7).setValue(amount);
+          break;
+        }
+      }
+    });
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: `${targetSaleIds.length}건 일괄 결제 완료`,
+      paidCount: targetSaleIds.length,
+      totalAmount: totalAmount,
+      method: cleanMethod
+    };
+  } catch (err) {
+    return { success: false, message: '일괄 결제 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/* ═════════════════════════════════════════════
+ * 데이터 삭제 함수들
+ * ═════════════════════════════════════════════ */
+
+/**
+ * deleteOutstanding - 외상 단건 삭제
+ * Outstanding 시트에서 행 삭제
+ * Sales 시트에는 거래 기록은 남겨두되 상태를 '삭제됨'으로 변경
+ */
+function deleteOutstanding(saleId) {
+  if (!saleId) return { success: false, message: '거래번호가 필요합니다.' };
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const outstandingSheet = _ensureOutstandingSheet(ss);
+
+    const data = outstandingSheet.getDataRange().getValues();
+    let foundRow = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(saleId).trim()) {
+        foundRow = i + 1;
+        break;
+      }
+    }
+
+    if (foundRow < 0) {
+      return { success: false, message: '외상 거래를 찾을 수 없습니다.' };
+    }
+
+    // Outstanding 시트에서 행 삭제
+    outstandingSheet.deleteRow(foundRow);
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: '외상 기록 삭제 완료',
+      saleId: saleId
+    };
+  } catch (err) {
+    return { success: false, message: '삭제 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/**
+ * resetAllOutstanding - 모든 외상 초기화
+ * Outstanding 시트의 모든 데이터 삭제 (헤더는 유지)
+ */
+function resetAllOutstanding(confirmCode) {
+  if (confirmCode !== 'RESET-OUTSTANDING-2026') {
+    return {
+      success: false,
+      message: '확인 코드가 올바르지 않습니다. "RESET-OUTSTANDING-2026"을 입력하세요.'
+    };
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const outstandingSheet = _ensureOutstandingSheet(ss);
+
+    const lastRow = outstandingSheet.getLastRow();
+    if (lastRow <= 1) {
+      return { success: true, message: '외상 데이터가 없습니다.', deleted: 0 };
+    }
+
+    const deletedCount = lastRow - 1;
+    // 헤더 빼고 모두 삭제
+    outstandingSheet.deleteRows(2, deletedCount);
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: `외상 ${deletedCount}건 모두 삭제됨`,
+      deleted: deletedCount
+    };
+  } catch (err) {
+    return { success: false, message: '초기화 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/**
+ * deletePreorder - 선주문 단건 완전 삭제
+ *  - 예약중이면 재고 복원
+ *  - Preorders, PreorderItems 시트에서 행 삭제
+ */
+function deletePreorder(preorderId) {
+  if (!preorderId) return { success: false, message: '예약번호가 필요합니다.' };
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const productsSheet = ss.getSheetByName(SHEET_PRODUCTS);
+    const { preordersSheet, itemsSheet } = _ensurePreorderSheets(ss);
+
+    // 예약 찾기
+    const data = preordersSheet.getDataRange().getValues();
+    let foundRow = -1;
+    let currentStatus = '';
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(preorderId).trim()) {
+        foundRow = i + 1;
+        currentStatus = String(data[i][5] || '').trim();
+        break;
+      }
+    }
+
+    if (foundRow < 0) {
+      return { success: false, message: '예약을 찾을 수 없습니다.' };
+    }
+
+    // 예약중이면 재고 복원
+    let restoredCount = 0;
+    if (currentStatus === '예약중') {
+      const itemsData = itemsSheet.getDataRange().getValues();
+      const items = [];
+      for (let i = 1; i < itemsData.length; i++) {
+        if (String(itemsData[i][0]).trim() === String(preorderId).trim()) {
+          items.push({
+            id:  String(itemsData[i][1]),
+            qty: Number(itemsData[i][3]) || 0
+          });
+        }
+      }
+
+      const productData = productsSheet.getDataRange().getValues();
+      const indexMap = {};
+      for (let i = 1; i < productData.length; i++) {
+        if (productData[i][0]) indexMap[String(productData[i][0]).trim()] = i;
+      }
+
+      for (const item of items) {
+        const rowIdx = indexMap[item.id];
+        if (rowIdx === undefined) continue;
+        const currentStock = Number(productData[rowIdx][4]) || 0;
+        productsSheet.getRange(rowIdx + 1, 5).setValue(currentStock + item.qty);
+        restoredCount++;
+      }
+    }
+
+    // PreorderItems 시트에서 관련 항목 삭제 (뒤에서부터)
+    const itemsData = itemsSheet.getDataRange().getValues();
+    const itemRowsToDelete = [];
+    for (let i = 1; i < itemsData.length; i++) {
+      if (String(itemsData[i][0]).trim() === String(preorderId).trim()) {
+        itemRowsToDelete.push(i + 1);
+      }
+    }
+    itemRowsToDelete.sort((a, b) => b - a).forEach(rowIdx => {
+      itemsSheet.deleteRow(rowIdx);
+    });
+
+    // Preorders 시트에서 헤더 삭제
+    preordersSheet.deleteRow(foundRow);
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: '선주문 삭제 완료' + (restoredCount > 0 ? ` (재고 ${restoredCount}개 복원)` : ''),
+      preorderId: preorderId,
+      restoredItems: restoredCount
+    };
+  } catch (err) {
+    return { success: false, message: '삭제 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/**
+ * resetAllPreorders - 모든 선주문 초기화
+ *  - 예약중인 것들은 재고 복원
+ *  - Preorders, PreorderItems 모두 비움
+ */
+function resetAllPreorders(confirmCode) {
+  if (confirmCode !== 'RESET-PREORDERS-2026') {
+    return {
+      success: false,
+      message: '확인 코드가 올바르지 않습니다. "RESET-PREORDERS-2026"을 입력하세요.'
+    };
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const productsSheet = ss.getSheetByName(SHEET_PRODUCTS);
+    const { preordersSheet, itemsSheet } = _ensurePreorderSheets(ss);
+
+    // 1단계: 예약중 선주문의 재고 복원
+    const data = preordersSheet.getDataRange().getValues();
+    const itemsData = itemsSheet.getDataRange().getValues();
+
+    // 예약중인 PreorderID 모음
+    const pendingIds = new Set();
+    for (let i = 1; i < data.length; i++) {
+      const status = String(data[i][5] || '').trim();
+      if (status === '예약중' && data[i][0]) {
+        pendingIds.add(String(data[i][0]).trim());
+      }
+    }
+
+    // 재고 복원
+    if (pendingIds.size > 0) {
+      const productData = productsSheet.getDataRange().getValues();
+      const indexMap = {};
+      for (let i = 1; i < productData.length; i++) {
+        if (productData[i][0]) indexMap[String(productData[i][0]).trim()] = i;
+      }
+
+      const stockChanges = {};  // rowIdx → 추가할 수량
+      for (let i = 1; i < itemsData.length; i++) {
+        const poId = String(itemsData[i][0] || '').trim();
+        if (!pendingIds.has(poId)) continue;
+        const productId = String(itemsData[i][1]);
+        const qty = Number(itemsData[i][3]) || 0;
+        const rowIdx = indexMap[productId];
+        if (rowIdx === undefined) continue;
+        stockChanges[rowIdx] = (stockChanges[rowIdx] || 0) + qty;
+      }
+
+      Object.keys(stockChanges).forEach(rowIdx => {
+        const currentStock = Number(productData[rowIdx][4]) || 0;
+        productsSheet.getRange(Number(rowIdx) + 1, 5).setValue(currentStock + stockChanges[rowIdx]);
+      });
+    }
+
+    // 2단계: 모든 행 삭제 (헤더는 유지)
+    const preordersLastRow = preordersSheet.getLastRow();
+    const itemsLastRow = itemsSheet.getLastRow();
+
+    let deletedPreorders = 0;
+    let deletedItems = 0;
+
+    if (preordersLastRow > 1) {
+      deletedPreorders = preordersLastRow - 1;
+      preordersSheet.deleteRows(2, deletedPreorders);
+    }
+
+    if (itemsLastRow > 1) {
+      deletedItems = itemsLastRow - 1;
+      itemsSheet.deleteRows(2, deletedItems);
+    }
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: `선주문 ${deletedPreorders}건 (항목 ${deletedItems}개) 삭제됨`,
+      deletedPreorders: deletedPreorders,
+      deletedItems: deletedItems,
+      restoredOrders: pendingIds.size
+    };
+  } catch (err) {
+    return { success: false, message: '초기화 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/**
+ * deleteCustomerData - 특정 고객의 모든 데이터 삭제
+ *  - Sales, Outstanding, Preorders, PreorderItems에서 해당 고객의 모든 거래 삭제
+ *  - 예약중 선주문은 재고 복원
+ */
+function deleteCustomerData(phone) {
+  if (!phone) return { success: false, message: '연락처가 필요합니다.' };
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const targetPhone = _normalizePhone(phone);
+
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const productsSheet = ss.getSheetByName(SHEET_PRODUCTS);
+    const salesSheet = ss.getSheetByName(SHEET_SALES);
+    const saleItemsSheet = ss.getSheetByName(SHEET_SALE_ITEMS);
+    const outstandingSheet = _ensureOutstandingSheet(ss);
+    const { preordersSheet, itemsSheet: preorderItemsSheet } = _ensurePreorderSheets(ss);
+
+    let deletedSales = 0;
+    let deletedSaleItems = 0;
+    let deletedOutstanding = 0;
+    let deletedPreorders = 0;
+    let deletedPreorderItems = 0;
+    let restoredCount = 0;
+
+    // 1. Sales에서 해당 고객 찾기
+    const targetSaleIds = new Set();
+    if (salesSheet) {
+      const salesData = salesSheet.getDataRange().getValues();
+      const rowsToDelete = [];
+      for (let i = 1; i < salesData.length; i++) {
+        const recordPhone = _normalizePhone(salesData[i][11]);
+        if (recordPhone === targetPhone) {
+          targetSaleIds.add(String(salesData[i][0]));
+          rowsToDelete.push(i + 1);
+        }
+      }
+      // 뒤에서부터 삭제
+      rowsToDelete.sort((a, b) => b - a).forEach(r => salesSheet.deleteRow(r));
+      deletedSales = rowsToDelete.length;
+    }
+
+    // 2. SaleItems에서 해당 거래의 항목 삭제
+    if (saleItemsSheet && targetSaleIds.size > 0) {
+      const itemsData = saleItemsSheet.getDataRange().getValues();
+      const rowsToDelete = [];
+      for (let i = 1; i < itemsData.length; i++) {
+        const txId = String(itemsData[i][0] || '').trim();
+        if (targetSaleIds.has(txId)) {
+          rowsToDelete.push(i + 1);
+        }
+      }
+      rowsToDelete.sort((a, b) => b - a).forEach(r => saleItemsSheet.deleteRow(r));
+      deletedSaleItems = rowsToDelete.length;
+    }
+
+    // 3. Outstanding에서 해당 고객 삭제
+    if (outstandingSheet) {
+      const outData = outstandingSheet.getDataRange().getValues();
+      const rowsToDelete = [];
+      for (let i = 1; i < outData.length; i++) {
+        const recordPhone = _normalizePhone(outData[i][3]);
+        if (recordPhone === targetPhone) {
+          rowsToDelete.push(i + 1);
+        }
+      }
+      rowsToDelete.sort((a, b) => b - a).forEach(r => outstandingSheet.deleteRow(r));
+      deletedOutstanding = rowsToDelete.length;
+    }
+
+    // 4. Preorders에서 해당 고객 찾기 + 예약중이면 재고 복원
+    const targetPreorderIds = new Set();
+    const pendingPreorderIds = new Set();
+    if (preordersSheet) {
+      const poData = preordersSheet.getDataRange().getValues();
+      const rowsToDelete = [];
+      for (let i = 1; i < poData.length; i++) {
+        const recordPhone = _normalizePhone(poData[i][3]);
+        if (recordPhone === targetPhone) {
+          const poId = String(poData[i][0]);
+          targetPreorderIds.add(poId);
+          if (String(poData[i][5] || '').trim() === '예약중') {
+            pendingPreorderIds.add(poId);
+          }
+          rowsToDelete.push(i + 1);
+        }
+      }
+
+      // 예약중 선주문의 재고 복원
+      if (pendingPreorderIds.size > 0 && preorderItemsSheet) {
+        const piData = preorderItemsSheet.getDataRange().getValues();
+        const productData = productsSheet.getDataRange().getValues();
+        const indexMap = {};
+        for (let i = 1; i < productData.length; i++) {
+          if (productData[i][0]) indexMap[String(productData[i][0]).trim()] = i;
+        }
+
+        const stockChanges = {};
+        for (let i = 1; i < piData.length; i++) {
+          const poId = String(piData[i][0] || '').trim();
+          if (!pendingPreorderIds.has(poId)) continue;
+          const productId = String(piData[i][1]);
+          const qty = Number(piData[i][3]) || 0;
+          const rowIdx = indexMap[productId];
+          if (rowIdx === undefined) continue;
+          stockChanges[rowIdx] = (stockChanges[rowIdx] || 0) + qty;
+        }
+
+        Object.keys(stockChanges).forEach(rowIdx => {
+          const currentStock = Number(productData[rowIdx][4]) || 0;
+          productsSheet.getRange(Number(rowIdx) + 1, 5).setValue(currentStock + stockChanges[rowIdx]);
+          restoredCount++;
+        });
+      }
+
+      rowsToDelete.sort((a, b) => b - a).forEach(r => preordersSheet.deleteRow(r));
+      deletedPreorders = rowsToDelete.length;
+    }
+
+    // 5. PreorderItems 삭제
+    if (preorderItemsSheet && targetPreorderIds.size > 0) {
+      const piData = preorderItemsSheet.getDataRange().getValues();
+      const rowsToDelete = [];
+      for (let i = 1; i < piData.length; i++) {
+        const poId = String(piData[i][0] || '').trim();
+        if (targetPreorderIds.has(poId)) {
+          rowsToDelete.push(i + 1);
+        }
+      }
+      rowsToDelete.sort((a, b) => b - a).forEach(r => preorderItemsSheet.deleteRow(r));
+      deletedPreorderItems = rowsToDelete.length;
+    }
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: `고객 데이터 삭제 완료`,
+      details: {
+        deletedSales: deletedSales,
+        deletedSaleItems: deletedSaleItems,
+        deletedOutstanding: deletedOutstanding,
+        deletedPreorders: deletedPreorders,
+        deletedPreorderItems: deletedPreorderItems,
+        restoredProducts: restoredCount
+      }
+    };
+  } catch (err) {
+    return { success: false, message: '삭제 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/* ═════════════════════════════════════════════
+ * 관리자 비밀번호 관리
+ * ═════════════════════════════════════════════ */
+
+const SETTINGS_KEY_ADMIN_PASSWORD = 'admin_password';
+const DEFAULT_ADMIN_PASSWORD = 'garden2026';
+
+/**
+ * getAdminPassword - 현재 관리자 비밀번호 조회
+ * Apps Script PropertiesService를 사용하여 비밀번호 저장
+ */
+function getAdminPassword() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const stored = props.getProperty(SETTINGS_KEY_ADMIN_PASSWORD);
+    return {
+      success: true,
+      password: stored || DEFAULT_ADMIN_PASSWORD
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: '비밀번호 조회 실패: ' + err.message,
+      password: DEFAULT_ADMIN_PASSWORD
+    };
+  }
+}
+
+
+/**
+ * changeAdminPassword - 관리자 비밀번호 변경
+ *
+ * params: {
+ *   currentPassword: 현재 비밀번호 (확인용),
+ *   newPassword: 새 비밀번호
+ * }
+ */
+function changeAdminPassword(params) {
+  if (!params || !params.currentPassword) {
+    return { success: false, message: '현재 비밀번호를 입력하세요.' };
+  }
+  if (!params.newPassword) {
+    return { success: false, message: '새 비밀번호를 입력하세요.' };
+  }
+  if (String(params.newPassword).length < 4) {
+    return { success: false, message: '비밀번호는 4자 이상이어야 합니다.' };
+  }
+  if (String(params.newPassword).length > 50) {
+    return { success: false, message: '비밀번호는 50자 이하로 입력하세요.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const stored = props.getProperty(SETTINGS_KEY_ADMIN_PASSWORD) || DEFAULT_ADMIN_PASSWORD;
+
+    // 현재 비밀번호 확인
+    if (String(params.currentPassword) !== stored) {
+      return { success: false, message: '현재 비밀번호가 일치하지 않습니다.' };
+    }
+
+    // 같은 비밀번호 차단
+    if (String(params.newPassword) === stored) {
+      return { success: false, message: '기존 비밀번호와 동일합니다.' };
+    }
+
+    // 새 비밀번호 저장
+    props.setProperty(SETTINGS_KEY_ADMIN_PASSWORD, String(params.newPassword));
+
+    return {
+      success: true,
+      message: '비밀번호가 변경되었습니다.'
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: '비밀번호 변경 실패: ' + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/**
+ * verifyAdminPassword - 비밀번호 검증 (로그인용)
+ * 보안 노트: 클라이언트가 평문으로 비밀번호를 보내지만,
+ *           HTTPS이므로 전송 중에는 암호화됨
+ */
+function verifyAdminPassword(params) {
+  try {
+    if (!params || !params.password) {
+      return { success: false, message: '비밀번호를 입력하세요.' };
+    }
+    const props = PropertiesService.getScriptProperties();
+    const stored = props.getProperty(SETTINGS_KEY_ADMIN_PASSWORD) || DEFAULT_ADMIN_PASSWORD;
+
+    if (String(params.password) === stored) {
+      return { success: true };
+    } else {
+      return { success: false, message: '비밀번호가 일치하지 않습니다.' };
+    }
+  } catch (err) {
+    return { success: false, message: '인증 실패: ' + err.message };
+  }
+}
+
+
+/* ═════════════════════════════════════════════
+ * 거래 완전 삭제 (Sales + SaleItems + 재고 복원 + 외상 정리)
+ * ═════════════════════════════════════════════ */
+
+/**
+ * deleteSale - 거래 1건 완전 삭제
+ *  - Sales 시트에서 해당 행 삭제
+ *  - SaleItems 시트에서 관련 항목 삭제
+ *  - 재고 자동 복원 (환불 상태가 아니면)
+ *  - 외상이었으면 Outstanding 시트에서도 삭제
+ *  - 선주문 픽업 거래였으면 Preorders 상태를 '예약중'으로 되돌림
+ */
+function deleteSale(params) {
+  if (!params || !params.saleId) {
+    return { success: false, message: '거래번호가 필요합니다.' };
+  }
+  const saleId = String(params.saleId).trim();
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const productsSheet = ss.getSheetByName(SHEET_PRODUCTS);
+    const salesSheet = ss.getSheetByName(SHEET_SALES);
+    const saleItemsSheet = ss.getSheetByName(SHEET_SALE_ITEMS);
+    const outstandingSheet = _ensureOutstandingSheet(ss);
+    const { preordersSheet } = _ensurePreorderSheets(ss);
+
+    if (!salesSheet) {
+      return { success: false, message: 'Sales 시트를 찾을 수 없습니다.' };
+    }
+
+    // 1. Sales에서 거래 찾기
+    const salesData = salesSheet.getDataRange().getValues();
+    let foundRow = -1;
+    let saleStatus = '';
+    let saleNote = '';
+    for (let i = 1; i < salesData.length; i++) {
+      if (String(salesData[i][0]).trim() === saleId) {
+        foundRow = i + 1;
+        saleStatus = String(salesData[i][8] || '').trim();
+        saleNote = String(salesData[i][9] || '');
+        break;
+      }
+    }
+
+    if (foundRow < 0) {
+      return { success: false, message: '거래를 찾을 수 없습니다.' };
+    }
+
+    // 2. SaleItems에서 항목 수집 (재고 복원에 필요)
+    const items = [];
+    if (saleItemsSheet) {
+      const itemsData = saleItemsSheet.getDataRange().getValues();
+      for (let i = 1; i < itemsData.length; i++) {
+        if (String(itemsData[i][0]).trim() === saleId) {
+          items.push({
+            id: String(itemsData[i][1]),
+            qty: Number(itemsData[i][4]) || 0,
+            rowIdx: i + 1
+          });
+        }
+      }
+    }
+
+    // 3. 재고 복원 (환불 상태가 아닐 때만 - 환불은 이미 재고 복원됨)
+    let restoredCount = 0;
+    if (saleStatus !== '환불됨' && items.length > 0) {
+      const productData = productsSheet.getDataRange().getValues();
+      const indexMap = {};
+      for (let i = 1; i < productData.length; i++) {
+        if (productData[i][0]) indexMap[String(productData[i][0]).trim()] = i;
+      }
+
+      items.forEach(it => {
+        const rowIdx = indexMap[it.id];
+        if (rowIdx === undefined) return;
+        const currentStock = Number(productData[rowIdx][4]) || 0;
+        productsSheet.getRange(rowIdx + 1, 5).setValue(currentStock + it.qty);
+
+        // 판매수 차감 (Column I = 9, 1-indexed)
+        const currentSold = Number(productData[rowIdx][8]) || 0;
+        if (currentSold >= it.qty) {
+          productsSheet.getRange(rowIdx + 1, 9).setValue(currentSold - it.qty);
+        }
+        restoredCount++;
+      });
+    }
+
+    // 4. 외상이었다면 Outstanding에서 삭제
+    let removedFromOutstanding = false;
+    if (outstandingSheet) {
+      const outData = outstandingSheet.getDataRange().getValues();
+      for (let i = outData.length - 1; i >= 1; i--) {
+        if (String(outData[i][0]).trim() === saleId) {
+          outstandingSheet.deleteRow(i + 1);
+          removedFromOutstanding = true;
+        }
+      }
+    }
+
+    // 5. 선주문 픽업 거래였다면 Preorders 상태를 '예약중'으로 되돌림
+    //    메모에서 [선주문 PO-...] 패턴 추출
+    let restoredPreorder = '';
+    if (preordersSheet && saleNote) {
+      const m = saleNote.match(/\[선주문\s+(PO-[\w-]+)/);
+      if (m && m[1]) {
+        const preorderId = m[1];
+        const poData = preordersSheet.getDataRange().getValues();
+        for (let i = 1; i < poData.length; i++) {
+          if (String(poData[i][0]).trim() === preorderId) {
+            // 픽업완료 → 예약중으로 되돌림
+            preordersSheet.getRange(i + 1, 6).setValue('예약중');
+            preordersSheet.getRange(i + 1, 8).setValue('');  // pickupAt 클리어
+            preordersSheet.getRange(i + 1, 9).setValue('');  // saleId 클리어
+            restoredPreorder = preorderId;
+            // 재고 차감 (예약중이면 재고가 차감된 상태여야 함)
+            // 위 3번에서 이미 재고 복원했으니, 다시 차감
+            const itemsData = saleItemsSheet.getDataRange().getValues();
+            const productData = productsSheet.getDataRange().getValues();
+            const idxMap = {};
+            for (let j = 1; j < productData.length; j++) {
+              if (productData[j][0]) idxMap[String(productData[j][0]).trim()] = j;
+            }
+            items.forEach(it => {
+              const r = idxMap[it.id];
+              if (r === undefined) return;
+              const cs = Number(productData[r][4]) || 0;
+              // 위에서 +qty 했으니 다시 -qty 해서 예약중 상태로
+              productsSheet.getRange(r + 1, 5).setValue(cs);  // 이미 복원했지만 다시 차감 처리 위해 후속에서
+            });
+            // 깔끔하게 다시 차감
+            const productData2 = productsSheet.getDataRange().getValues();
+            items.forEach(it => {
+              const r = idxMap[it.id];
+              if (r === undefined) return;
+              const cs = Number(productData2[r][4]) || 0;
+              productsSheet.getRange(r + 1, 5).setValue(cs - it.qty);
+            });
+            restoredCount -= items.length;  // 결과적으로 재고는 그대로 (예약중)
+            break;
+          }
+        }
+      }
+    }
+
+    // 6. SaleItems 항목 삭제 (뒤에서부터)
+    if (saleItemsSheet) {
+      items.sort((a, b) => b.rowIdx - a.rowIdx).forEach(it => {
+        saleItemsSheet.deleteRow(it.rowIdx);
+      });
+    }
+
+    // 7. Sales에서 거래 삭제
+    salesSheet.deleteRow(foundRow);
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: '거래 삭제 완료',
+      saleId: saleId,
+      restoredItems: restoredCount,
+      removedFromOutstanding: removedFromOutstanding,
+      restoredPreorder: restoredPreorder
+    };
+  } catch (err) {
+    return { success: false, message: '삭제 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/**
+ * getSaleDetail - 거래 1건 상세 조회 (편집용)
+ */
+function getSaleDetail(params) {
+  if (!params || !params.saleId) {
+    return { success: false, message: '거래번호가 필요합니다.' };
+  }
+  const saleId = String(params.saleId).trim();
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const salesSheet = ss.getSheetByName(SHEET_SALES);
+    const saleItemsSheet = ss.getSheetByName(SHEET_SALE_ITEMS);
+
+    if (!salesSheet) return { success: false, message: 'Sales 시트 없음' };
+
+    const salesData = salesSheet.getDataRange().getValues();
+    let sale = null;
+
+    for (let i = 1; i < salesData.length; i++) {
+      if (String(salesData[i][0]).trim() === saleId) {
+        sale = {
+          saleId: String(salesData[i][0]),
+          date: salesData[i][1] instanceof Date ? salesData[i][1].toISOString() : String(salesData[i][1]),
+          itemCount: Number(salesData[i][2]) || 0,
+          totalQty: Number(salesData[i][3]) || 0,
+          amount: Number(salesData[i][4]) || 0,
+          method: String(salesData[i][5] || ''),
+          tendered: Number(salesData[i][6]) || 0,
+          change: Number(salesData[i][7]) || 0,
+          status: String(salesData[i][8] || ''),
+          note: String(salesData[i][9] || ''),
+          customerName: String(salesData[i][10] || ''),
+          customerPhone: String(salesData[i][11] || ''),
+          items: []
+        };
+        break;
+      }
+    }
+
+    if (!sale) return { success: false, message: '거래를 찾을 수 없습니다.' };
+
+    if (saleItemsSheet) {
+      const itemsData = saleItemsSheet.getDataRange().getValues();
+      for (let i = 1; i < itemsData.length; i++) {
+        if (String(itemsData[i][0]).trim() === saleId) {
+          sale.items.push({
+            id: String(itemsData[i][1]),
+            name: String(itemsData[i][2]),
+            price: Number(itemsData[i][3]) || 0,
+            qty: Number(itemsData[i][4]) || 0,
+            subtotal: Number(itemsData[i][5]) || 0
+          });
+        }
+      }
+    }
+
+    return { success: true, sale: sale };
+  } catch (err) {
+    return { success: false, message: '조회 실패: ' + err.message };
+  }
+}
+
+
+/**
+ * updateSale - 거래의 메모/고객정보만 편집 (가벼운 수정)
+ *  - 항목 변경은 위험하므로 메모/고객 정보만 허용
+ */
+function updateSale(params) {
+  if (!params || !params.saleId) {
+    return { success: false, message: '거래번호가 필요합니다.' };
+  }
+  const saleId = String(params.saleId).trim();
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return { success: false, message: '잠시 후 다시 시도하세요.' };
+  }
+
+  try {
+    _checkSheetId();
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const salesSheet = ss.getSheetByName(SHEET_SALES);
+    if (!salesSheet) return { success: false, message: 'Sales 시트 없음' };
+
+    const salesData = salesSheet.getDataRange().getValues();
+    let foundRow = -1;
+    for (let i = 1; i < salesData.length; i++) {
+      if (String(salesData[i][0]).trim() === saleId) {
+        foundRow = i + 1;
+        break;
+      }
+    }
+
+    if (foundRow < 0) return { success: false, message: '거래를 찾을 수 없습니다.' };
+
+    // 메모, 고객명, 연락처 업데이트 (제공된 것만)
+    if (params.note !== undefined) {
+      salesSheet.getRange(foundRow, 10).setValue(String(params.note || ''));
+    }
+    if (params.customerName !== undefined) {
+      salesSheet.getRange(foundRow, 11).setValue(String(params.customerName || ''));
+    }
+    if (params.customerPhone !== undefined) {
+      salesSheet.getRange(foundRow, 12).setValue(String(params.customerPhone || ''));
+    }
+
+    SpreadsheetApp.flush();
+    return { success: true, message: '거래 수정 완료', saleId: saleId };
+  } catch (err) {
+    return { success: false, message: '수정 실패: ' + err.message };
+  } finally {
+    lock.releaseLock();
   }
 }

@@ -227,6 +227,26 @@
       border-color: #007aff; font-weight: 600;
     }
 
+    /* 결제 형태 필터 */
+    .method-filter-row { display: inline-flex; }
+    .method-filter-btn {
+      padding: 6px 12px; background: white;
+      border: 1px solid #e5e5ea; border-radius: 8px;
+      font-size: 12px; cursor: pointer;
+      color: #4a4a4f; font-family: inherit;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .method-filter-btn:hover { background: #f5f5f7; }
+    .method-filter-btn.active {
+      background: #1d1d1f; color: white;
+      border-color: #1d1d1f; font-weight: 600;
+    }
+    .method-filter-btn[data-method="현금"].active { background: #34c759; border-color: #34c759; }
+    .method-filter-btn[data-method="Venmo"].active { background: #3D95CE; border-color: #3D95CE; }
+    .method-filter-btn[data-method="외상"].active { background: #ff3b30; border-color: #ff3b30; }
+    .method-filter-btn[data-method="선주문"].active { background: #5856d6; border-color: #5856d6; }
+
     .pagination {
       display: flex; justify-content: center; align-items: center;
       gap: 8px; margin-top: 12px;
@@ -500,6 +520,21 @@
       <button class="period-tab" data-period="week" onclick="changePeriod('week')">최근 7일</button>
       <button class="period-tab" data-period="month" onclick="changePeriod('month')">이번달</button>
       <button class="period-tab" data-period="year" onclick="changePeriod('year')">올해</button>
+      <button class="period-tab" data-period="custom" onclick="changePeriod('custom')">📅 기간 선택</button>
+    </div>
+
+    <!-- 사용자 지정 기간 선택 영역 -->
+    <div id="customPeriodRow" style="display:none; background:white; border-radius:12px; padding:14px 16px; margin-bottom:14px; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="font-size:13px; color:#8e8e93; font-weight:600;">📅 기간:</span>
+      <input type="date" id="customStartDate" onchange="onCustomPeriodChange()"
+             style="padding:8px 10px; border:1px solid #d1d1d6; border-radius:8px; font-size:13px; font-family:inherit;">
+      <span style="font-size:13px; color:#8e8e93;">~</span>
+      <input type="date" id="customEndDate" onchange="onCustomPeriodChange()"
+             style="padding:8px 10px; border:1px solid #d1d1d6; border-radius:8px; font-size:13px; font-family:inherit;">
+      <button onclick="setCustomQuick('yesterday')" style="padding:6px 12px; background:#f5f5f7; border:1px solid #e5e5ea; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit;">어제</button>
+      <button onclick="setCustomQuick('last7')" style="padding:6px 12px; background:#f5f5f7; border:1px solid #e5e5ea; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit;">지난 7일</button>
+      <button onclick="setCustomQuick('last30')" style="padding:6px 12px; background:#f5f5f7; border:1px solid #e5e5ea; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit;">지난 30일</button>
+      <button onclick="setCustomQuick('lastmonth')" style="padding:6px 12px; background:#f5f5f7; border:1px solid #e5e5ea; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit;">지난달</button>
     </div>
 
     <div class="summary-grid">
@@ -558,6 +593,19 @@
           </div>
         </div>
 
+        <!-- 검색 + 결제 형태 필터 -->
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+          <input type="text" id="filterSearch" placeholder="🔍 고객명/연락처 검색..." oninput="onFilterChange()"
+                 style="flex:1; min-width:200px; padding:8px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:13px; font-family:inherit;">
+          <div class="method-filter-row" style="display:flex; gap:4px; flex-wrap:wrap;">
+            <button class="method-filter-btn active" data-method="all" onclick="changeMethodFilter('all')">전체</button>
+            <button class="method-filter-btn" data-method="현금" onclick="changeMethodFilter('현금')">💵 현금</button>
+            <button class="method-filter-btn" data-method="Venmo" onclick="changeMethodFilter('Venmo')">💸 Venmo</button>
+            <button class="method-filter-btn" data-method="외상" onclick="changeMethodFilter('외상')">📝 외상</button>
+            <button class="method-filter-btn" data-method="선주문" onclick="changeMethodFilter('선주문')">📅 선주문</button>
+          </div>
+        </div>
+
         <div class="sales-pagesize-row">
           <span class="page-info" id="pageInfo">전체 0건</span>
           <div class="pagesize-selector">
@@ -583,13 +631,17 @@
 
   <script>
     let currentPeriod = 'today';
+    let customPeriodStart = '';   // custom 시작일
+    let customPeriodEnd = '';     // custom 종료일
+    let currentMethodFilter = 'all';  // 결제 형태 필터
     let dailyChart, hourlyChart, paymentChart;
 
     const PERIOD_LABEL = {
       today: '오늘',
       week:  '최근 7일',
       month: '이번달',
-      year:  '올해'
+      year:  '올해',
+      custom: '사용자 지정'
     };
 
     window.addEventListener('load', () => {
@@ -602,17 +654,80 @@
       document.querySelectorAll('.period-tab').forEach(t => {
         t.classList.toggle('active', t.dataset.period === p);
       });
+
+      // 사용자 지정 영역 표시 토글
+      const customRow = document.getElementById('customPeriodRow');
+      customRow.style.display = p === 'custom' ? 'flex' : 'none';
+
+      if (p === 'custom') {
+        // 기본값: 오늘
+        const today = new Date().toISOString().split('T')[0];
+        if (!document.getElementById('customStartDate').value) {
+          document.getElementById('customStartDate').value = today;
+        }
+        if (!document.getElementById('customEndDate').value) {
+          document.getElementById('customEndDate').value = today;
+        }
+        onCustomPeriodChange();
+      } else {
+        loadStats();
+      }
+    }
+
+    function onCustomPeriodChange() {
+      const s = document.getElementById('customStartDate').value;
+      const e = document.getElementById('customEndDate').value;
+      if (!s || !e) return;
+      if (s > e) {
+        alert('시작일이 종료일보다 늦을 수 없습니다');
+        return;
+      }
+      customPeriodStart = s;
+      customPeriodEnd = e;
       loadStats();
+    }
+
+    function setCustomQuick(type) {
+      const today = new Date();
+      let start, end;
+      end = new Date(today);
+
+      if (type === 'yesterday') {
+        start = new Date(today);
+        start.setDate(start.getDate() - 1);
+        end = new Date(start);
+      } else if (type === 'last7') {
+        start = new Date(today);
+        start.setDate(start.getDate() - 6);
+      } else if (type === 'last30') {
+        start = new Date(today);
+        start.setDate(start.getDate() - 29);
+      } else if (type === 'lastmonth') {
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end = new Date(today.getFullYear(), today.getMonth(), 0);
+      }
+
+      document.getElementById('customStartDate').value = start.toISOString().split('T')[0];
+      document.getElementById('customEndDate').value = end.toISOString().split('T')[0];
+      onCustomPeriodChange();
     }
 
     function loadStats() {
       document.getElementById('sumAmount').innerHTML = '<span class="loading"></span>';
-      api('getStats', { period: currentPeriod })
-        .then(res => { (onStatsLoaded)(res); })
-        .catch(err => { (err => {
+
+      // period 전달: custom일 때는 객체, 아니면 문자열
+      let periodPayload = currentPeriod;
+      if (currentPeriod === 'custom') {
+        if (!customPeriodStart || !customPeriodEnd) return;
+        periodPayload = { start: customPeriodStart, end: customPeriodEnd };
+      }
+
+      api('getStats', { period: periodPayload })
+        .then(res => { onStatsLoaded(res); })
+        .catch(err => {
           document.getElementById('sumAmount').textContent = '오류';
           console.error(err);
-        })(err); });
+        });
     }
 
     function onStatsLoaded(res) {
@@ -623,7 +738,17 @@
       document.getElementById('sumAvg').textContent     = fmtUSD(s.avgTicket);
       document.getElementById('sumPayment').textContent =
         `${fmtUSD(s.cashAmount)} / ${fmtUSD(s.venmoAmount)}`;
-      document.getElementById('sumPeriodLabel').textContent = PERIOD_LABEL[currentPeriod];
+
+      // 기간 라벨 - custom이면 날짜 범위 표시
+      let periodLabel = PERIOD_LABEL[currentPeriod] || '';
+      if (currentPeriod === 'custom' && customPeriodStart && customPeriodEnd) {
+        if (customPeriodStart === customPeriodEnd) {
+          periodLabel = customPeriodStart;
+        } else {
+          periodLabel = `${customPeriodStart} ~ ${customPeriodEnd}`;
+        }
+      }
+      document.getElementById('sumPeriodLabel').textContent = periodLabel;
 
       renderDailyChart(res.daily);
       renderHourlyChart(res.hourly);
@@ -781,15 +906,17 @@
     }
 
     function applyFiltersAndRender() {
-      // 1. 날짜 필터 적용
+      // 1. 날짜 필터 + 검색어 + 결제 형태 필터 적용
       const startStr = document.getElementById('filterDateStart').value;
       const endStr = document.getElementById('filterDateEnd').value;
+      const searchTerm = (document.getElementById('filterSearch').value || '').trim().toLowerCase();
 
       filteredSales = allSales.filter(s => {
         if (!s.date) return false;
         const saleDate = new Date(s.date);
         if (isNaN(saleDate.getTime())) return false;
 
+        // 날짜 범위
         if (startStr) {
           const startDate = new Date(startStr + 'T00:00:00');
           if (saleDate < startDate) return false;
@@ -798,6 +925,27 @@
           const endDate = new Date(endStr + 'T23:59:59');
           if (saleDate > endDate) return false;
         }
+
+        // 검색어 (고객명/연락처)
+        if (searchTerm) {
+          const haystack = (
+            (s.customerName || '') + ' ' +
+            (s.customerPhone || '') + ' ' +
+            (s.note || '')
+          ).toLowerCase();
+          if (!haystack.includes(searchTerm)) return false;
+        }
+
+        // 결제 형태 필터
+        if (currentMethodFilter && currentMethodFilter !== 'all') {
+          if (currentMethodFilter === '선주문') {
+            // '선주문'은 메모에 [선주문 으로 시작
+            if (!s.note || s.note.indexOf('[선주문') !== 0) return false;
+          } else {
+            if (s.method !== currentMethodFilter) return false;
+          }
+        }
+
         return true;
       });
 
@@ -851,6 +999,20 @@
     function resetDateFilter() {
       document.getElementById('filterDateStart').value = '';
       document.getElementById('filterDateEnd').value = '';
+      document.getElementById('filterSearch').value = '';
+      currentMethodFilter = 'all';
+      document.querySelectorAll('.method-filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.method === 'all');
+      });
+      currentPage = 1;
+      applyFiltersAndRender();
+    }
+
+    function changeMethodFilter(method) {
+      currentMethodFilter = method;
+      document.querySelectorAll('.method-filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.method === method);
+      });
       currentPage = 1;
       applyFiltersAndRender();
     }
